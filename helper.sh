@@ -74,26 +74,29 @@ main_menu() {
     echo -e "   ${YELLOW}17)${NC} ${GREEN}Git Backup${NC}"
     echo -e "   ${YELLOW}18)${NC} ${GREEN}Klipper Gcode Shell Command${NC}"
     echo ""
+    echo -e "  ${CYAN}--- Step 6: Power ---${NC}"
+    echo -e "   ${YELLOW}19)${NC} ${GREEN}Auto Power Off (smart plug: Tapo, Tasmota, Shelly, ...)${NC}"
+    echo ""
     echo -e "  ${WHITE}[Remove] Menu${NC}"
-    echo -e "   ${YELLOW}19)${NC} ${GREEN}Remove a feature${NC}"
+    echo -e "   ${YELLOW}20)${NC} ${GREEN}Remove a feature${NC}"
     echo ""
     echo -e "  ${WHITE}[Backup & Restore] Menu${NC}"
-    echo -e "   ${YELLOW}20)${NC} ${GREEN}Backup Klipper configuration${NC}"
-    echo -e "   ${YELLOW}21)${NC} ${GREEN}Restore Klipper configuration${NC}"
-    echo -e "   ${YELLOW}22)${NC} ${GREEN}Backup Moonraker database${NC}"
-    echo -e "   ${YELLOW}23)${NC} ${GREEN}Restore Moonraker database${NC}"
+    echo -e "   ${YELLOW}21)${NC} ${GREEN}Backup Klipper configuration${NC}"
+    echo -e "   ${YELLOW}22)${NC} ${GREEN}Restore Klipper configuration${NC}"
+    echo -e "   ${YELLOW}23)${NC} ${GREEN}Backup Moonraker database${NC}"
+    echo -e "   ${YELLOW}24)${NC} ${GREEN}Restore Moonraker database${NC}"
     echo ""
     echo -e "  ${WHITE}[Tools] Menu${NC}"
-    echo -e "   ${YELLOW}24)${NC} ${GREEN}Restart Klipper${NC}"
-    echo -e "   ${YELLOW}25)${NC} ${GREEN}Restart Moonraker${NC}"
-    echo -e "   ${YELLOW}26)${NC} ${GREEN}Restart Nginx${NC}"
-    echo -e "   ${YELLOW}27)${NC} ${GREEN}View Klipper log${NC}"
-    echo -e "   ${YELLOW}28)${NC} ${GREEN}View Moonraker log${NC}"
-    echo -e "   ${YELLOW}29)${NC} ${GREEN}Show installed features${NC}"
-    echo -e "   ${YELLOW}30)${NC} ${GREEN}Update Entware packages${NC}"
-    echo -e "   ${YELLOW}31)${NC} ${GREEN}Clear logs & cache${NC}"
-    echo -e "   ${YELLOW}32)${NC} ${GREEN}System information${NC}"
-    echo -e "   ${YELLOW}33)${NC} ${GREEN}Update helper script${NC}               ${WHITE}[installed: $(installed_version)]${NC}"
+    echo -e "   ${YELLOW}25)${NC} ${GREEN}Restart Klipper${NC}"
+    echo -e "   ${YELLOW}26)${NC} ${GREEN}Restart Moonraker${NC}"
+    echo -e "   ${YELLOW}27)${NC} ${GREEN}Restart Nginx${NC}"
+    echo -e "   ${YELLOW}28)${NC} ${GREEN}View Klipper log${NC}"
+    echo -e "   ${YELLOW}29)${NC} ${GREEN}View Moonraker log${NC}"
+    echo -e "   ${YELLOW}30)${NC} ${GREEN}Show installed features${NC}"
+    echo -e "   ${YELLOW}31)${NC} ${GREEN}Update Entware packages${NC}"
+    echo -e "   ${YELLOW}32)${NC} ${GREEN}Clear logs & cache${NC}"
+    echo -e "   ${YELLOW}33)${NC} ${GREEN}System information${NC}"
+    echo -e "   ${YELLOW}34)${NC} ${GREEN}Update helper script${NC}               ${WHITE}[installed: $(installed_version)]${NC}"
     echo ""
     echo -e "    ${YELLOW}0)${NC} ${RED}Exit${NC}"
     echo ""
@@ -129,21 +132,22 @@ handle_choice() {
         16) sh "$SCRIPTS_DIR/octoapp.sh" install ;;
         17) sh "$SCRIPTS_DIR/git_backup.sh" install ;;
         18) confirm_install "Klipper Gcode Shell Command" && sh "$SCRIPTS_DIR/shell_command.sh" install ;;
-        19) remove_menu; main_menu; return ;;
-        20) sh "$SCRIPTS_DIR/backup.sh" backup ;;
-        21) sh "$SCRIPTS_DIR/backup.sh" restore ;;
-        22) sh "$SCRIPTS_DIR/backup.sh" backup_database ;;
-        23) sh "$SCRIPTS_DIR/backup.sh" restore_database ;;
-        24) sh "$SCRIPTS_DIR/system.sh" restart_klipper ;;
-        25) sh "$SCRIPTS_DIR/system.sh" restart_moonraker ;;
-        26) sh "$SCRIPTS_DIR/system.sh" restart_nginx ;;
-        27) tail -50 "$LOGS_DIR/klippy.log" | less ;;
-        28) tail -50 "$LOGS_DIR/moonraker.log" | less ;;
-        29) sh "$SCRIPTS_DIR/system.sh" show_installed ;;
-        30) sh "$SCRIPTS_DIR/system.sh" update_entware ;;
-        31) sh "$SCRIPTS_DIR/system.sh" clear_logs_cache ;;
-        32) sh "$SCRIPTS_DIR/system.sh" system_info ;;
-        33) run_update ;;
+        19) sh "$SCRIPTS_DIR/auto_power_off.sh" install ;;
+        20) remove_menu; main_menu; return ;;
+        21) sh "$SCRIPTS_DIR/backup.sh" backup ;;
+        22) sh "$SCRIPTS_DIR/backup.sh" restore ;;
+        23) sh "$SCRIPTS_DIR/backup.sh" backup_database ;;
+        24) sh "$SCRIPTS_DIR/backup.sh" restore_database ;;
+        25) sh "$SCRIPTS_DIR/system.sh" restart_klipper ;;
+        26) sh "$SCRIPTS_DIR/system.sh" restart_moonraker ;;
+        27) sh "$SCRIPTS_DIR/system.sh" restart_nginx ;;
+        28) tail -50 "$LOGS_DIR/klippy.log" | less ;;
+        29) tail -50 "$LOGS_DIR/moonraker.log" | less ;;
+        30) sh "$SCRIPTS_DIR/system.sh" show_installed ;;
+        31) sh "$SCRIPTS_DIR/system.sh" update_entware ;;
+        32) sh "$SCRIPTS_DIR/system.sh" clear_logs_cache ;;
+        33) sh "$SCRIPTS_DIR/system.sh" system_info ;;
+        34) run_update ;;
         0)  echo ""; echo "Goodbye!"; echo ""; exit 0 ;;
         *)  echo -e "${RED}Invalid choice.${NC}"; sleep 1 ;;
     esac
@@ -219,6 +223,7 @@ remove_menu() {
     echo -e "   ${YELLOW}16)${NC}  ${GREEN}OctoApp Companion${NC}"
     echo -e "   ${YELLOW}17)${NC}  ${GREEN}Git Backup${NC}"
     echo -e "   ${YELLOW}18)${NC}  ${GREEN}Klipper Gcode Shell Command${NC}"
+    echo -e "   ${YELLOW}19)${NC}  ${GREEN}Auto Power Off${NC}"
     echo -e "    ${YELLOW}0)${NC}  ${RED}Back to main menu${NC}"
     echo ""
     printf "  ${GREEN}Enter choice:${NC} "
@@ -242,6 +247,7 @@ remove_menu() {
         16) sh "$SCRIPTS_DIR/octoapp.sh" remove ;;
         17) sh "$SCRIPTS_DIR/git_backup.sh" remove ;;
         18) sh "$SCRIPTS_DIR/shell_command.sh" remove ;;
+        19) sh "$SCRIPTS_DIR/auto_power_off.sh" remove ;;
         0)  return ;;
         *)  echo -e "${RED}Invalid choice.${NC}"; sleep 1; remove_menu; return ;;
     esac

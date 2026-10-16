@@ -30,7 +30,7 @@ The menu header shows what was detected, e.g. `Detected: K2 (no chamber heater, 
 The helper updates itself. The commit it was installed from is stored in
 `/mnt/UDISK/helper-script/.version`; on every start `helper.sh` compares it with the
 latest commit on GitHub, lists what changed and offers the update (Enter = yes).
-You can also update from the menu (Tools → 33) or non-interactively over SSH:
+You can also update from the menu (Tools → 34) or non-interactively over SSH:
 
 ```sh
 sh /mnt/UDISK/helper-script/helper.sh --update
@@ -63,8 +63,9 @@ pick up the change when you reinstall them from the menu.
 | 16 | OctoApp Companion |
 | 17 | Git Backup |
 | 18 | Klipper Gcode Shell Command |
-| 20-23 | Backup / restore Klipper configuration and Moonraker database |
-| 24-33 | Tools: restarts, logs, Entware update, clear logs & cache, system information, update helper script |
+| 19 | Auto Power Off - switch the printer off with a smart plug after the print has cooled down (Kasa with network search, Tasmota, Shelly, Home Assistant) |
+| 21-24 | Backup / restore Klipper configuration and Moonraker database |
+| 25-34 | Tools: restarts, logs, Entware update, clear logs & cache, system information, update helper script |
 
 ## K2 (base) differences
 
@@ -91,6 +92,26 @@ defers the master-server mesh and runs the adaptive mesh inside `START_PRINT`.
 Put `LINE_PURGE` in your slicer start G-code after `T[initial_no_support_extruder]`
 (see the wiki for the full OrcaSlicer start G-code).
 
+## Auto Power Off
+
+Option 19 switches the printer off through a smart plug once a print has finished
+and nozzle and bed are below 50 °C (configurable). Starting a print or heating up
+cancels it; a cancelled print does not power off.
+
+- **TP-Link Kasa**: the installer can search the network for Kasa plugs (it asks
+  first). Classic plugs (HS100, HS110, KP105, KP115, ...) become a Moonraker
+  `tplink_smartplug` device, no login needed. Newer models / firmware with the
+  encrypted KLAP protocol (KP125M, EP25, ...), which Moonraker cannot switch, are
+  switched locally by `scripts/kasa.py` with your TP-Link account; only a hash of
+  the password is stored, in `/mnt/UDISK/helper-script/.kasa.json`. Tapo plugs
+  answer the same search and work the same way.
+- **Tasmota, Shelly, Home Assistant** or an existing Moonraker power device:
+  added as `[power printer_plug]` to `moonraker.conf` (needs option 1).
+
+Macros: `ACTIVATE_POWER_OFF` (power off after this print), `DEACTIVATE_POWER_OFF`,
+`AUTO_POWER_OFF ENABLE=1|0` (every print; the installer sets the default).
+Give the plug a fixed IP address (DHCP reservation in your router).
+
 ## Requirements
 
 - Creality K2 / K2 Combo (also K2 Pro, K2 Plus)
@@ -107,6 +128,8 @@ Put `LINE_PURGE` in your slicer start G-code after `T[initial_no_support_extrude
 - [vsevolod-volkov](https://github.com/vsevolod-volkov/K2Plus-entware) - Entware on K2 (wget shim solution)
 - [AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc) - Stream conversion software
 - [Arksine](https://github.com/Arksine) - gcode_shell_command.py
+- [tinntbg/auto-power-off-klipper](https://github.com/tinntbg/auto-power-off-klipper) - Auto power off macros
+- [python-kasa](https://github.com/python-kasa/python-kasa) - Kasa protocol and discovery reference
 - [Clon1998/mobileraker_companion](https://github.com/Clon1998/mobileraker_companion) - Mobileraker Companion
 - [prestonbrown/HelixScreen](https://github.com/prestonbrown/helixscreen) - Modern touchscreen UI for Klipper
 - [Klipper](https://www.klipper3d.org), [Moonraker](https://moonraker.readthedocs.io), [Fluidd](https://docs.fluidd.xyz), [Mainsail](https://docs.mainsail.xyz)

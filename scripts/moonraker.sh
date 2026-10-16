@@ -1,5 +1,5 @@
 #!/bin/sh
-# moonraker.sh - Install/remove Moonraker extensions for K2 Plus
+# moonraker.sh - Install/remove Moonraker extensions for K2
 
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
@@ -23,9 +23,9 @@ install_moonraker_extensions() {
     # 1. Create our moonraker.conf wrapper in /mnt/UDISK
     if [ ! -f "$MOONRAKER_CONF" ]; then
         cat > "$MOONRAKER_CONF" << 'EOF'
-# Creality K2 Plus - Moonraker extension config
+# Creality K2 - Moonraker extension config
 # Managed by Creality Helper Script
-# https://github.com/sw3defy/Creality-Helper-Script-Wiki-K2-Plus
+# https://github.com/bbraeu/Creality-Helper-Script-K2-Base
 #
 # This file loads the stock read-only Moonraker config first,
 # then extensions added by the helper script appear below.

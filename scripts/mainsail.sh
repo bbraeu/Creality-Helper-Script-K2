@@ -1,5 +1,5 @@
 #!/bin/sh
-# mainsail.sh - Install, update, repair, or remove Mainsail on port 4409 for K2 Plus
+# mainsail.sh - Install, update, repair, or remove Mainsail on port 4409 for K2
 
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"

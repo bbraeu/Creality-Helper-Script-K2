@@ -1,32 +1,33 @@
 #!/bin/sh
-# backup.sh - Backup and restore Klipper configuration for K2 Plus
+# backup.sh - Backup and restore Klipper configuration for K2
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 
 BACKUP_DIR=/mnt/UDISK/helper-script/backups
 
-backup_config() {
-    printf "Backup Klipper configuration? [y/n]: "
+PRINTER_DATA=/mnt/UDISK/printer_data
+
+# backup_archive <prefix> <folder in printer_data> <label>
+backup_archive() {
+    printf "Backup %s? [y/n]: " "$3"
     read confirm
     [ "$confirm" != "y" ] && [ "$confirm" != "Y" ] && { log_info "Cancelled."; return 0; }
     echo ""
-    log_info "Backing up Klipper configuration..."
+    log_info "Backing up $3..."
     mkdir -p "$BACKUP_DIR"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    BACKUP_FILE="$BACKUP_DIR/klipper_config_${TIMESTAMP}.tar.gz"
+    BACKUP_FILE="$BACKUP_DIR/${1}_${TIMESTAMP}.tar.gz"
 
-    tar -czf "$BACKUP_FILE" -C /mnt/UDISK/printer_data config/
-
-    if [ $? -eq 0 ]; then
+    if tar -czf "$BACKUP_FILE" -C "$PRINTER_DATA" "$2/"; then
         echo ""
         log_success "Backup saved to: $BACKUP_FILE"
         SIZE=$(du -sh "$BACKUP_FILE" | cut -f1)
         log_info "Backup size: $SIZE"
         echo ""
 
-        # Keep only last 5 backups
-        ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null
+        # Keep only last 5 backups of this kind
+        ls -t "$BACKUP_DIR"/${1}_*.tar.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null
         log_info "Keeping last 5 backups. Older backups removed."
     else
         log_error "Backup failed."
@@ -34,20 +35,22 @@ backup_config() {
     echo ""
 }
 
-restore_config() {
+# restore_archive <prefix> <label>; sets RESTORED_FILE on success
+restore_archive() {
+    RESTORED_FILE=""
     echo ""
-    log_info "Available backups:"
+    log_info "Available $2 backups:"
     echo ""
 
-    if [ ! -d "$BACKUP_DIR" ] || [ -z "$(ls "$BACKUP_DIR"/*.tar.gz 2>/dev/null)" ]; then
-        log_warn "No backups found in $BACKUP_DIR"
+    if [ -z "$(ls "$BACKUP_DIR"/${1}_*.tar.gz 2>/dev/null)" ]; then
+        log_warn "No $2 backups found in $BACKUP_DIR"
         return 1
     fi
 
     i=1
-    for f in $(ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null); do
+    for f in $(ls -t "$BACKUP_DIR"/${1}_*.tar.gz 2>/dev/null); do
         SIZE=$(du -sh "$f" | cut -f1)
-        DATE=$(basename "$f" .tar.gz | sed 's/klipper_config_//' | sed 's/_/ /')
+        DATE=$(basename "$f" .tar.gz | sed "s/^${1}_//" | sed 's/_/ /')
         echo "  $i) $DATE  [$SIZE]"
         eval "BACKUP_$i=$f"
         i=$((i+1))
@@ -60,7 +63,7 @@ restore_config() {
 
     if [ "$choice" = "0" ] || [ -z "$choice" ]; then
         log_info "Cancelled."
-        return 0
+        return 1
     fi
 
     eval "SELECTED=\$BACKUP_$choice"
@@ -70,18 +73,20 @@ restore_config() {
     fi
 
     echo ""
-    echo -e "${YELLOW}WARNING: This will overwrite your current config files.${NC}"
+    echo -e "${YELLOW}WARNING: This will overwrite your current $2.${NC}"
     printf "Are you sure? [y/n]: "
     read confirm
     if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
         log_info "Cancelled."
-        return 0
+        return 1
     fi
+    RESTORED_FILE=$SELECTED
+}
 
-    log_info "Restoring from: $(basename $SELECTED)..."
-    tar -xzf "$SELECTED" -C /mnt/UDISK/printer_data/
-
-    if [ $? -eq 0 ]; then
+restore_config() {
+    restore_archive klipper_config "Klipper configuration" || return 0
+    log_info "Restoring from: $(basename "$RESTORED_FILE")..."
+    if tar -xzf "$RESTORED_FILE" -C "$PRINTER_DATA/"; then
         log_success "Config restored successfully."
         restart_klipper force
     else
@@ -90,8 +95,28 @@ restore_config() {
     echo ""
 }
 
+# Moonraker database: print history, job queue, UI settings, webcams, ...
+restore_database() {
+    restore_archive moonraker_database "Moonraker database" || return 0
+    log_info "Stopping Moonraker..."
+    for pid in $(ps aux | grep moonraker.py | grep -v grep | awk '{print $1}'); do
+        kill "$pid" 2>/dev/null
+    done
+    sleep 2
+    rm -rf "$PRINTER_DATA/database"
+    if tar -xzf "$RESTORED_FILE" -C "$PRINTER_DATA/"; then
+        log_success "Moonraker database restored."
+    else
+        log_error "Restore failed."
+    fi
+    restart_moonraker force
+    echo ""
+}
+
 case "$1" in
-    backup)  backup_config ;;
-    restore) restore_config ;;
-    *)       echo "Usage: $0 [backup|restore]" ;;
+    backup)           backup_archive klipper_config config "Klipper configuration" ;;
+    restore)          restore_config ;;
+    backup_database)  backup_archive moonraker_database database "Moonraker database" ;;
+    restore_database) restore_database ;;
+    *)                echo "Usage: $0 [backup|restore|backup_database|restore_database]" ;;
 esac

@@ -1,5 +1,5 @@
 #!/bin/sh
-# helixscreen.sh - Install/remove HelixScreen on K2 Plus
+# helixscreen.sh - Install/remove HelixScreen on K2
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 
@@ -72,7 +72,7 @@ print('Downloaded installer')
         return 1
     fi
 
-    # Remove update_manager section - not supported on K2 Plus
+    # Remove update_manager section - not supported on K2
     python3 -c "
 import re
 try:

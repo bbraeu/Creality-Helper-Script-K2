@@ -1,5 +1,5 @@
 #!/bin/sh
-# timelapse.sh - Moonraker Timelapse for K2 Plus
+# timelapse.sh - Moonraker Timelapse for K2
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 TIMELAPSE_URL=https://github.com/mainsail-crew/moonraker-timelapse/archive/refs/heads/main.zip

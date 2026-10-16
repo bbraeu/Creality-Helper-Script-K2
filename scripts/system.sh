@@ -1,5 +1,5 @@
 #!/bin/sh
-# system.sh - Service management and system utilities for K2 Plus Helper Script
+# system.sh - Service management and system utilities for K2 Helper Script
 
 SCRIPT_DIR=/mnt/UDISK/helper-script
 CONFIG_DIR=/mnt/UDISK/printer_data/config
@@ -78,6 +78,104 @@ restart_camera() {
     log_success "Camera service restarted."
 }
 
+# ── Entware / services ────────────────────────────────────────────────────────
+
+# Fail unless Entware is installed; puts /opt/bin first on PATH
+require_entware() {
+    if [ ! -x /opt/bin/opkg ]; then
+        log_error "Entware is required. Install it first: [Install] Menu → Entware Package Manager."
+        return 1
+    fi
+    export PATH=/opt/bin:/opt/sbin:$PATH
+}
+
+opkg_install() {
+    log_info "Installing packages: $*"
+    /opt/bin/opkg update > /dev/null 2>&1
+    /opt/bin/opkg install "$@"
+}
+
+# Write, enable and start an OpenWrt procd service: install_service <name> <command...>
+# procd restarts the command if it exits. Extra environment: SERVICE_ENV="A=1 B=2"
+install_service() {
+    local name="$1"
+    shift
+    cat > "/etc/init.d/$name" << EOF
+#!/bin/sh /etc/rc.common
+# Managed by Creality Helper Script
+START=99
+STOP=10
+USE_PROCD=1
+
+start_service() {
+    procd_open_instance
+    procd_set_param env HOME=/root PATH=/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin ${SERVICE_ENV}
+    procd_set_param command $*
+    procd_set_param respawn 3600 10 0
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+}
+EOF
+    chmod +x "/etc/init.d/$name"
+    "/etc/init.d/$name" enable
+    "/etc/init.d/$name" restart
+}
+
+remove_service() {
+    if [ -x "/etc/init.d/$1" ]; then
+        "/etc/init.d/$1" stop
+        "/etc/init.d/$1" disable
+    fi
+    rm -f "/etc/init.d/$1"
+}
+
+# ── Tools ─────────────────────────────────────────────────────────────────────
+
+update_entware() {
+    require_entware || return 1
+    log_info "Updating Entware packages..."
+    opkg update && opkg upgrade
+    log_success "Entware packages updated."
+}
+
+clear_logs_cache() {
+    printf "Clear old logs and caches? [y/n]: "
+    read confirm
+    [ "$confirm" != "y" ] && [ "$confirm" != "Y" ] && { log_info "Cancelled."; return 0; }
+    local before after
+    before=$(df -k /mnt/UDISK | awk 'NR==2 {print $4}')
+    # Rotated logs can go; live logs are truncated, not deleted - Klipper and
+    # Moonraker keep them open and would stop logging until restarted
+    rm -f "$LOGS_DIR"/*.log.* "$LOGS_DIR"/*.gz
+    for f in "$LOGS_DIR"/*.log; do
+        [ -f "$f" ] && : > "$f"
+    done
+    rm -f /tmp/go2rtc.log /tmp/watchdog.log /tmp/camera_startup.log
+    rm -rf /root/.cache /mnt/UDISK/.cache
+    [ -x /opt/bin/pip3 ] && /opt/bin/pip3 cache purge > /dev/null 2>&1
+    after=$(df -k /mnt/UDISK | awk 'NR==2 {print $4}')
+    log_success "Logs and caches cleared ($(( (after - before) / 1024 )) MB freed on /mnt/UDISK)."
+}
+
+system_info() {
+    detect_printer
+    local ip
+    ip=$(ip route get 1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+    echo ""
+    echo -e "  ${GREEN}Printer:${NC}    $(printer_summary)"
+    echo -e "  ${GREEN}Hostname:${NC}   $(cat /proc/sys/kernel/hostname)"
+    echo -e "  ${GREEN}IP address:${NC} ${ip:-unknown}"
+    echo -e "  ${GREEN}OS:${NC}         $(. /etc/openwrt_release 2>/dev/null; echo "${DISTRIB_DESCRIPTION:-unknown}")"
+    echo -e "  ${GREEN}Kernel:${NC}     $(uname -r) ($(uname -m))"
+    echo -e "  ${GREEN}Uptime:${NC}     $(uptime | sed 's/.*up \([^,]*\),.*/\1/')"
+    echo -e "  ${GREEN}Load:${NC}       $(cut -d' ' -f1-3 /proc/loadavg)"
+    echo -e "  ${GREEN}Memory:${NC}     $(free -m | awk '/^Mem:/ {print $3 " MB used / " $2 " MB"}')"
+    echo -e "  ${GREEN}UDISK:${NC}      $(df -h /mnt/UDISK | awk 'NR==2 {print $3 " used / " $2 " (" $5 ")"}')"
+    echo -e "  ${GREEN}Entware:${NC}    $([ -x /opt/bin/opkg ] && echo installed || echo "not installed")"
+    echo ""
+}
+
 # ── Feature tracking ──────────────────────────────────────────────────────────
 
 mark_installed() {
@@ -147,6 +245,190 @@ remove_include_from_printer_cfg() {
         sed -i "\|^\[include ${include_file}\]$|d" "$printer_cfg"
         log_success "Removed [include ${include_file}] from printer.cfg"
     fi
+}
+
+# ── Printer hardware detection ────────────────────────────────────────────────
+# The K2 family (K2 / K2 Pro / K2 Plus) shares firmware and stock macros but
+# differs in bed size, chamber heater and fans. Read the hardware from the
+# stock Klipper config instead of hard-coding one model.
+
+# Print an option of a config section: cfg_option <section> <option> [file]
+cfg_option() {
+    awk -v s="[$1]" -v o="$2" '
+        { sub(/[ \t\r]+$/, "") }
+        $0 == s { f = 1; next }
+        /^\[/   { f = 0 }
+        f && index($0, o) == 1 && substr($0, length(o) + 1) ~ /^[ \t]*[:=]/ {
+            sub(/^[^:=]*[:=][ \t]*/, ""); sub(/[ \t]*#.*$/, ""); print; exit
+        }' "${3:-$CONFIG_DIR/printer.cfg}" 2>/dev/null
+}
+
+# Print the config files Klipper actually loads: printer.cfg and its [include]
+# tree. Not *.cfg - the folder also holds SAVE_CONFIG backups (printer-<date>.cfg)
+# and other leftovers that would fake sections.
+cfg_loaded_files() {
+    local queue="$CONFIG_DIR/printer.cfg" seen=" " f inc g
+    while [ -n "$queue" ]; do
+        set -- $queue
+        f=$1
+        shift
+        queue="$*"
+        case "$seen" in *" $f "*) continue ;; esac
+        [ -f "$f" ] || continue
+        seen="$seen$f "
+        echo "$f"
+        for inc in $(sed -n 's/^\[include[[:space:]]\{1,\}\([^]]*\)\].*/\1/p' "$f"); do
+            # Includes are relative to the including file and may be globs
+            for g in "$(dirname "$f")"/$inc; do
+                queue="$queue $g"
+            done
+        done
+    done
+}
+
+# True if a loaded config file defines [section]
+cfg_has_section() {
+    grep -qs "^\[$1\]" $(cfg_loaded_files)
+}
+
+# Print the name of the first "[<type> <name>]" section whose name contains "chamber"
+cfg_chamber_object() {
+    grep -hos "^\[$1 [^]]*chamber[^]]*\]" $(cfg_loaded_files) | head -1 | sed "s/^\[$1 //; s/\]\$//"
+}
+
+# Print the integer part of $1, or $2 if $1 is not a number
+to_int() {
+    local v="${1%.*}"
+    case "$v" in ''|-|*[!0-9-]*) echo "$2" ;; *) echo "$v" ;; esac
+}
+
+# Sets PRINTER_MODEL, X_TRAVEL_MAX, MESH_X/Y_MIN/MAX, CHAMBER_HEATER, CHAMBER_FAN,
+# CHAMBER_SENSOR (full Klipper object name), HAS_Z_TILT, HAS_FAN0_EN, HAS_FAN2,
+# FAN0_SCALE, FAN2_SCALE
+detect_printer() {
+    # Travel limits reach past the bed on the K2 (X -12..262, Y up to 296.5 for the
+    # CFS cutter / wiper), so moves use the [bed_mesh] area: it is always on the bed
+    X_TRAVEL_MAX=$(to_int "$(cfg_option stepper_x position_max)" 262)
+    local mesh_min mesh_max
+    mesh_min=$(cfg_option bed_mesh mesh_min | tr -d ' ')
+    mesh_max=$(cfg_option bed_mesh mesh_max | tr -d ' ')
+    MESH_X_MIN=$(to_int "${mesh_min%%,*}" 5)
+    MESH_Y_MIN=$(to_int "${mesh_min##*,}" 5)
+    MESH_X_MAX=$(to_int "${mesh_max%%,*}" $((X_TRAVEL_MAX - 10)))
+    MESH_Y_MAX=$(to_int "${mesh_max##*,}" $((X_TRAVEL_MAX - 10)))
+
+    # Status prefers a dedicated chamber sensor; a temperature_fan reports its own sensor too
+    CHAMBER_HEATER=$(cfg_chamber_object heater_generic)
+    CHAMBER_FAN=$(cfg_chamber_object temperature_fan)
+    CHAMBER_SENSOR=$(cfg_chamber_object temperature_sensor)
+    if [ -n "$CHAMBER_HEATER" ]; then
+        CHAMBER_SENSOR="heater_generic $CHAMBER_HEATER"
+    elif [ -n "$CHAMBER_SENSOR" ]; then
+        CHAMBER_SENSOR="temperature_sensor $CHAMBER_SENSOR"
+    elif [ -n "$CHAMBER_FAN" ]; then
+        CHAMBER_SENSOR="temperature_fan $CHAMBER_FAN"
+    fi
+
+    HAS_Z_TILT=0;  cfg_has_section "z_tilt" && HAS_Z_TILT=1
+    # On the K2 base fan0_en is a static_digital_output (always on), not settable
+    HAS_FAN0_EN=0; cfg_has_section "output_pin fan0_en" && HAS_FAN0_EN=1
+    HAS_FAN2=0;    cfg_has_section "output_pin fan2" && HAS_FAN2=1
+    # Stock fans use "scale: 255", so SET_PIN expects 0-255 instead of 0-1
+    FAN0_SCALE=$(to_int "$(cfg_option "output_pin fan0" scale)" 1)
+    FAN2_SCALE=$(to_int "$(cfg_option "output_pin fan2" scale)" 1)
+
+    if [ "$X_TRAVEL_MAX" -ge 330 ]; then
+        PRINTER_MODEL="K2 Plus"
+    elif [ "$X_TRAVEL_MAX" -ge 285 ]; then
+        PRINTER_MODEL="K2 Pro"
+    else
+        PRINTER_MODEL="K2"
+    fi
+}
+
+printer_summary() {
+    local heater="no chamber heater"
+    [ -n "$CHAMBER_HEATER" ] && heater="chamber heater"
+    echo "$PRINTER_MODEL ($heater, bed mesh ${MESH_X_MIN},${MESH_Y_MIN} to ${MESH_X_MAX},${MESH_Y_MAX})"
+}
+
+# Append chamber macros matching the detected hardware to file $1.
+# Without a chamber heater (K2 base) only status/cooling macros are written.
+write_chamber_macros() {
+    local out="$1"
+    [ -z "$CHAMBER_SENSOR" ] && [ -z "$CHAMBER_FAN" ] && return 0
+
+    echo "" >> "$out"
+    echo "# ── Chamber ──────────────────────────────────────────────────────────────────" >> "$out"
+
+    if [ -n "$CHAMBER_HEATER" ]; then
+        cat >> "$out" << EOF
+
+[gcode_macro CHAMBER_HEAT]
+description: Set chamber heater target. Usage: CHAMBER_HEAT TARGET=45 WAIT=1
+gcode:
+  {% set target = params.TARGET|default(0)|float %}
+  {% set wait   = params.WAIT|default(0)|int %}
+  SET_HEATER_TEMPERATURE HEATER=${CHAMBER_HEATER} TARGET={target}
+  {% if wait == 1 and target > 0 %}
+    {action_respond_info("Waiting for chamber to reach %.0f C..." % target)}
+    TEMPERATURE_WAIT SENSOR="heater_generic ${CHAMBER_HEATER}" MINIMUM={target - 3}
+    {action_respond_info("Chamber reached target: %.0f C" % target)}
+  {% endif %}
+EOF
+    fi
+
+    if [ -n "$CHAMBER_HEATER" ] || [ -n "$CHAMBER_FAN" ]; then
+        {
+            echo ""
+            echo "[gcode_macro CHAMBER_COOL]"
+            echo "description: Turn off chamber heating and run the chamber fan"
+            echo "gcode:"
+            [ -n "$CHAMBER_HEATER" ] && echo "  SET_HEATER_TEMPERATURE HEATER=${CHAMBER_HEATER} TARGET=0"
+            [ -n "$CHAMBER_FAN" ] && echo "  SET_TEMPERATURE_FAN_TARGET TEMPERATURE_FAN=${CHAMBER_FAN} TARGET=20"
+            echo '  {action_respond_info("Chamber cooling started.")}'
+        } >> "$out"
+    fi
+
+    if [ -n "$CHAMBER_SENSOR" ]; then
+        cat >> "$out" << EOF
+
+[gcode_macro CHAMBER_STATUS]
+description: Print current chamber temperature (and target, if heated)
+gcode:
+  {% set c = printer["${CHAMBER_SENSOR}"] %}
+  {% if c.target is defined %}
+    {action_respond_info("Chamber: %.1f C  /  target: %.1f C" % (c.temperature, c.target))}
+  {% else %}
+    {action_respond_info("Chamber: %.1f C" % c.temperature)}
+  {% endif %}
+EOF
+    fi
+}
+
+# Space-separated list of the chamber macros write_chamber_macros produces
+chamber_macro_names() {
+    local names=""
+    [ -n "$CHAMBER_HEATER" ] && names="CHAMBER_HEAT"
+    { [ -n "$CHAMBER_HEATER" ] || [ -n "$CHAMBER_FAN" ]; } && names="$names CHAMBER_COOL"
+    [ -n "$CHAMBER_SENSOR" ] && names="$names CHAMBER_STATUS"
+    echo "${names# }"
+}
+
+# Find this printer's stock Klipper config dir in /rom (F008_... on the K2 Plus).
+# The firmware image may carry configs for several K2 models, so match on bed size
+# and give up (print nothing) unless exactly one directory matches.
+stock_config_dir() {
+    local ours dir match="" n=0
+    ours=$(cfg_option stepper_x position_max)
+    [ -z "$ours" ] && return 0
+    for dir in /rom/usr/share/klipper/config/*/; do
+        [ -f "${dir}motor_control.cfg" ] && [ -f "${dir}printer.cfg" ] || continue
+        [ "$(cfg_option stepper_x position_max "${dir}printer.cfg")" = "$ours" ] || continue
+        match="${dir%/}"
+        n=$((n + 1))
+    done
+    [ "$n" -eq 1 ] && echo "$match"
 }
 
 # ── moonraker.conf management ─────────────────────────────────────────────────
@@ -348,8 +630,16 @@ patch_stock_configs() {
     # tuning block, e.g. x_protection_param_prt_track_max_err) makes the
     # closed-loop X stepper far more sensitive to position-tracking errors,
     # causing key789 stalls during the CFS cut-position move (CR_BOX_CUT).
+    # The stock file is taken from this model's directory in /rom (see
+    # stock_config_dir), so K2 / K2 Pro / K2 Plus each get their own tuning.
     local motor_cfg="$CONFIG_DIR/motor_control.cfg"
-    local stock_motor_cfg="/rom/usr/share/klipper/config/F008_CR0CN240319C13/motor_control.cfg"
+    local stock_dir
+    stock_dir=$(stock_config_dir)
+    if [ -z "$stock_dir" ]; then
+        log_info "Stock config dir for this model not found in /rom, skipping motor_control.cfg check."
+        return 0
+    fi
+    local stock_motor_cfg="$stock_dir/motor_control.cfg"
     if [ -f "$motor_cfg" ] && [ -f "$stock_motor_cfg" ]; then
         if ! diff -q "$stock_motor_cfg" "$motor_cfg" > /dev/null 2>&1; then
             cp "$motor_cfg" "${motor_cfg}.before_patch" 2>/dev/null
@@ -357,6 +647,36 @@ patch_stock_configs() {
             log_success "Restored motor_control.cfg from stock (was truncated/modified - this caused X-axis tracking errors during CFS cuts)"
         else
             log_info "motor_control.cfg already matches stock."
+        fi
+    fi
+}
+
+# Add-ons that live partly outside /mnt/UDISK: KAMP-K2 (restore_bed_mesh.py in
+# Klipper's extras + gcode_macro.cfg patches) and Gcode Shell Command. A firmware
+# update can undo them, after which Klipper refuses to start on the unknown
+# config sections. Re-apply here.
+# $1 = "boot" when called from rc.local: only then is Klipper restarted, never
+# from the menu (a print may be running).
+ensure_addons() {
+    local changed=0
+    if is_installed "gcode_shell_command"; then
+        sh "$SCRIPT_DIR/scripts/shell_command.sh" ensure
+        [ $? -eq 2 ] && changed=1
+    fi
+    if is_installed "kamp"; then
+        sh "$SCRIPT_DIR/scripts/kamp.sh" ensure
+        [ $? -eq 2 ] && changed=1
+        detect_printer
+        if python3 "$SCRIPT_DIR/scripts/kamp_k2_patch.py" install "$CONFIG_DIR" "$PRINTER_MODEL" | grep -q "^CHANGED$"; then
+            changed=1
+            log_success "Re-applied KAMP-K2 config patches"
+        fi
+    fi
+    if [ "$changed" = 1 ]; then
+        if [ "$1" = "boot" ]; then
+            restart_klipper force
+        else
+            log_warn "Add-on files were re-applied - restart Klipper to load them."
         fi
     fi
 }
@@ -369,7 +689,7 @@ install_rc_local_patch() {
     if grep -q "patch_stock_configs" "$rc_local" 2>/dev/null; then
         log_info "rc.local patch already installed."
     else
-        sed -i 's|exit 0|# Patch stock Klipper configs\n/bin/sh /mnt/UDISK/helper-script/scripts/system.sh patch_stock_configs\n\nexit 0|' "$rc_local"
+        sed -i 's|exit 0|# Patch stock Klipper configs\n/bin/sh /mnt/UDISK/helper-script/scripts/system.sh patch_stock_configs boot\n\nexit 0|' "$rc_local"
         log_success "Added patch_stock_configs to rc.local"
     fi
 
@@ -431,7 +751,10 @@ case "$1" in
     restart_nginx)     restart_nginx ;;
     restart_camera)    restart_camera ;;
     show_installed)    show_installed ;;
-    patch_stock_configs) patch_stock_configs ;;
+    update_entware)    update_entware ;;
+    clear_logs_cache)  clear_logs_cache ;;
+    system_info)       system_info ;;
+    patch_stock_configs) patch_stock_configs; ensure_addons "$2" ;;
     install_rc_local_patch) install_rc_local_patch ;;
     install_moonraker_include) install_moonraker_include ;;
 esac

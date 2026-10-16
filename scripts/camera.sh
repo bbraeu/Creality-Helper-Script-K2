@@ -1,5 +1,5 @@
 #!/bin/sh
-# camera.sh - Install K2 Plus camera support for Fluidd and Mainsail
+# camera.sh - Install K2 camera support for Fluidd, Mainsail and Mobileraker
 # Credit: DnG-Crafts (https://github.com/DnG-Crafts/K2-Camera)
 #         AlexxIT/go2rtc (https://github.com/AlexxIT/go2rtc)
 SCRIPT_DIR=/mnt/UDISK/helper-script
@@ -13,10 +13,10 @@ install_camera() {
     echo ""
     echo ""
     echo "======================================================"
-    echo "  Camera Support for Fluidd and Mainsail"
+    echo "  Camera Support for Fluidd, Mainsail and Mobileraker"
     echo "======================================================"
     echo ""
-    echo "  This installs a WebRTC bridge that makes the K2 Plus"
+    echo "  This installs a WebRTC bridge that makes the K2"
     echo "  camera available in both Fluidd and Mainsail dashboards."
     echo ""
     echo "  Credit: DnG-Crafts and AlexxIT/go2rtc"
@@ -27,6 +27,26 @@ install_camera() {
     printf "  Continue? [y/n]: "
     read confirm
     [ "$confirm" != "y" ] && [ "$confirm" != "Y" ] && { log_info "Cancelled."; return 0; }
+
+    # Mobileraker shows go2rtc WebRTC only to supporters, and only MJPEG
+    # webcams can provide Companion notification snapshots. An extra MJPEG
+    # stream (H264 -> MJPEG via ffmpeg, only while someone watches) covers both.
+    echo ""
+    echo "  Add an MJPEG camera for Mobileraker / OctoEverywhere?"
+    echo "  (free Mobileraker version, notification snapshots, remote viewing;"
+    echo "   transcodes with ffmpeg - costs CPU only while it is being watched)"
+    printf "  Add MJPEG camera? [y/n]: "
+    read add_mjpeg
+    FFMPEG_BIN=""
+    if [ "$add_mjpeg" = "y" ] || [ "$add_mjpeg" = "Y" ]; then
+        for f in /usr/bin/ffmpeg /opt/bin/ffmpeg; do
+            [ -x "$f" ] && { FFMPEG_BIN=$f; break; }
+        done
+        if [ -z "$FFMPEG_BIN" ]; then
+            log_warn "ffmpeg not found - skipping the MJPEG camera (install Entware, then: opkg install ffmpeg)."
+        fi
+    fi
+
     # Download go2rtc if not present
     if [ ! -f "$GO2RTC" ]; then
         log_info "Downloading go2rtc (ARM)..."
@@ -44,6 +64,12 @@ print('Downloaded go2rtc')
     # Get printer IP
     PRINTER_IP=$(python3 -c "import subprocess; print(subprocess.check_output(['ip', 'route', 'get', '1']).decode().split('src')[1].strip().split()[0])")
 
+    # k2plus_mjpeg reads k2plus via go2rtc's RTSP server (:8554) on demand;
+    # lower width / -r if CPU load while printing is too high
+    MJPEG_STREAM=""
+    [ -n "$FFMPEG_BIN" ] && MJPEG_STREAM='  k2plus_mjpeg:
+    - "ffmpeg:k2plus#video=mjpeg#width=1280#raw=-r 10"'
+
     # Create go2rtc config
     cat > $GO2RTC_YAML << YAML
 api:
@@ -53,6 +79,7 @@ api:
 streams:
   k2plus:
     - "webrtc:http://127.0.0.1:8000/call/webrtc_local#format=creality"
+$MJPEG_STREAM
 
 webrtc:
   listen: :8555
@@ -62,6 +89,14 @@ webrtc:
     - urls:
         - stun:stun.l.google.com:19302
 YAML
+
+    if [ -n "$FFMPEG_BIN" ]; then
+        cat >> $GO2RTC_YAML << YAML
+
+ffmpeg:
+  bin: $FFMPEG_BIN
+YAML
+    fi
 
 
     # Create watchdog
@@ -147,11 +182,13 @@ else:
     # Add nginx proxy for go2rtc on port 4408 (Fluidd) and 4409 (Mainsail)
     python3 $SCRIPT_DIR/nginx_go2rtc.py
 
-    # Add camera to Moonraker (one entry for both Fluidd and Mainsail)
-    python3 -c "
-import urllib.request, json, socket
+    # Add camera(s) to Moonraker (shared by Fluidd, Mainsail and Mobileraker).
+    # Absolute URLs: Mobileraker resolves relative ones against port 80 and
+    # maps them through OctoEverywhere only when the host matches its printer IP.
+    MJPEG=$([ -n "$FFMPEG_BIN" ] && echo 1 || echo 0) python3 -c "
+import urllib.request, json, os
 import subprocess; ip = subprocess.check_output(['ip', 'route', 'get', '1']).decode().split('src')[1].strip().split()[0]
-for name in ['K2 Camera', 'K2 Camera Mainsail']:
+for name in ['K2 Camera', 'K2 Camera Mainsail', 'K2 Camera MJPEG']:
     try:
         req = urllib.request.Request('http://127.0.0.1:7125/server/webcams/item?name=' + name.replace(' ', '%20'), method='DELETE')
         urllib.request.urlopen(req)
@@ -168,14 +205,28 @@ camera = {
     'flip_vertical': False,
     'rotation': 0
 }
-data = json.dumps(camera).encode()
-req = urllib.request.Request(
-    'http://127.0.0.1:7125/server/webcams/item',
-    data=data, method='POST',
-    headers={'Content-Type': 'application/json'}
-)
-urllib.request.urlopen(req)
-print('Camera added to Moonraker')
+cameras = [camera]
+if os.environ.get('MJPEG') == '1':
+    cameras.append({
+        'name': 'K2 Camera MJPEG',
+        'location': 'printer',
+        'service': 'mjpegstreamer',
+        'target_fps': 10,
+        'target_fps_idle': 2,
+        'stream_url': 'http://' + ip + ':4409/go2rtc/api/stream.mjpeg?src=k2plus_mjpeg',
+        'snapshot_url': 'http://' + ip + ':4409/go2rtc/api/frame.jpeg?src=k2plus',
+        'flip_horizontal': False,
+        'flip_vertical': False,
+        'rotation': 0
+    })
+for cam in cameras:
+    req = urllib.request.Request(
+        'http://127.0.0.1:7125/server/webcams/item',
+        data=json.dumps(cam).encode(), method='POST',
+        headers={'Content-Type': 'application/json'}
+    )
+    urllib.request.urlopen(req)
+    print('Camera added to Moonraker: ' + cam['name'])
 "
 
     # Update Fluidd index.html with iframe keepalive and auto-reload
@@ -185,6 +236,7 @@ import subprocess; ip = subprocess.check_output(['ip', 'route', 'get', '1']).dec
 content = open('/usr/share/fluidd/index.html').read()
 content = re.sub(r'<iframe[^>]*go2rtc_keepalive[^>]*>.*?</iframe>', '', content)
 content = re.sub(r'<script>\nvar cameraReady.*?</script>', '', content, flags=re.DOTALL)
+content = re.sub(r'<script>\nfunction enableCamera\(\).*?</script>', '', content, flags=re.DOTALL)
 script = '''<script>
 function enableCamera() {
   try {
@@ -219,7 +271,7 @@ function enableMainsailCams() {
     if(cams && cams.length > 0) {
       var changed = false;
       cams.forEach(function(cam, i) {
-        if(!cam.enabled) { s.state.gui.webcams.webcams[i].enabled = true; changed = true; }
+        if(!cam.enabled && cam.service === 'webrtc-go2rtc') { s.state.gui.webcams.webcams[i].enabled = true; changed = true; }
       });
       if(changed) s.state.gui.webcams.webcams = s.state.gui.webcams.webcams.slice();
     }
@@ -235,8 +287,10 @@ print('Mainsail index.html updated')
     /etc/rc.d/S80nginx restart
     mark_installed "camera_support"
     echo ""
-    log_success "Camera support installed for Fluidd and Mainsail!"
+    log_success "Camera support installed for Fluidd, Mainsail and Mobileraker!"
     log_info "The camera will appear in both dashboards after reboot."
+    log_info "Mobileraker: add the printer by IP address. 'K2 Camera' (WebRTC) needs a"
+    log_info "Mobileraker supporter subscription; 'K2 Camera MJPEG' works for everyone."
     log_info "Note: Camera takes 60-90 seconds to appear after boot."
     echo ""
     echo -e "  ${YELLOW}A reboot is required for the camera service to start!${NC}"
@@ -283,7 +337,7 @@ print('Nginx restored')
     # Remove cameras from Moonraker
     python3 -c "
 import urllib.request
-for name in ['K2 Camera', 'K2 Camera Mainsail']:
+for name in ['K2 Camera', 'K2 Camera Mainsail', 'K2 Camera MJPEG']:
     try:
         req = urllib.request.Request('http://127.0.0.1:7125/server/webcams/item?name=' + name.replace(' ', '%20'), method='DELETE')
         urllib.request.urlopen(req)
@@ -297,6 +351,7 @@ import re
 content = open('/usr/share/fluidd/index.html').read()
 content = re.sub(r'<iframe[^>]*go2rtc_keepalive[^>]*></iframe>', '', content)
 content = re.sub(r'<script>\nvar cameraReady.*?</script>', '', content, flags=re.DOTALL)
+content = re.sub(r'<script>\nfunction enableCamera\(\).*?</script>', '', content, flags=re.DOTALL)
 open('/usr/share/fluidd/index.html', 'w').write(content)
 print('Fluidd index.html restored')
 "

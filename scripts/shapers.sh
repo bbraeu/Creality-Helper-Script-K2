@@ -1,6 +1,6 @@
 #!/bin/sh
-# shapers.sh - Improved Shapers Calibrations for K2 Plus (LIS2DW accelerometer)
-# Includes all K1 Max shaper macros adapted for K2 Plus hardware
+# shapers.sh - Improved Shapers Calibrations for K2 (LIS2DW accelerometer)
+# Includes all K1 Max shaper macros adapted for K2 hardware
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 SHAPERS_CFG=$CONFIG_DIR/shapers_calibration.cfg
@@ -19,13 +19,13 @@ install_shapers() {
     echo ""
 
     cat > "$SHAPERS_CFG" << 'EOF'
-# Improved Shapers Calibrations — K2 Plus
+# Improved Shapers Calibrations — K2
 # Managed by Creality Helper Script
 #
 # Hardware: LIS2DW accelerometer on nozzle_mcu via SPI
 #   CS: nozzle_mcu:PA4 | SCLK: nozzle_mcu:PA5
 #   MOSI: nozzle_mcu:PA7 | MISO: nozzle_mcu:PA6
-#   Axes map: x,z,y | Probe point: 175,175,175
+#   Probe point: see [resonance_tester] in printer.cfg
 #
 # Macros included:
 #   INPUT_SHAPER_CALIBRATION  - full X+Y calibration (recommended)
@@ -78,10 +78,10 @@ gcode:
   {action_respond_info("Y axis test complete. Run SAVE_CONFIG to apply.")}
 
 # ── Belt tension analysis ─────────────────────────────────────────────────────
-# K2 Plus has dual belts (X and Y CoreXY).
+# K2-series printers are CoreXY with two belts (X and Y).
 # This macro performs a low-frequency sweep on each axis to compare the
 # frequency profiles of individual belts, helping diagnose uneven tension.
-# Target belt tension: 140N (see [belt_mdl] in printer.cfg)
+# Target belt tension: see Settings > Self-check > Belt Tension on the screen
 
 [gcode_macro BELTS_SHAPER_CALIBRATION]
 description: Analyse belt tension via frequency sweep. Compare X and Y profiles.
@@ -98,7 +98,7 @@ gcode:
   {action_respond_info("Min freq: %.1fHz  Max freq: %.1fHz" % (printer['gcode_macro BELTS_SHAPER_CALIBRATION'].min_freq, printer['gcode_macro BELTS_SHAPER_CALIBRATION'].max_freq))}
   {action_respond_info("Both axes should show similar frequency peaks if belt tension is balanced.")}
   {action_respond_info("Unbalanced peaks indicate one belt is tighter/looser than the other.")}
-  {action_respond_info("Target belt tension: 140N (check Settings > Self-check > Belt Tension)")}
+  {action_respond_info("Check belt tension via Settings > Self-check > Belt Tension")}
 
   TEST_RESONANCES AXIS=X OUTPUT=raw_data NAME=belt_x \
     FREQ_START={printer['gcode_macro BELTS_SHAPER_CALIBRATION'].min_freq} \
@@ -220,7 +220,7 @@ EOF
     echo "  2. Review results in console"
     echo "  3. Run AUTOTUNE_SHAPERS to save"
     echo ""
-    log_info "Belt tension check: Settings → Self-check → Belt Tension (target: 140N)"
+    log_info "Belt tension check: Settings → Self-check → Belt Tension"
     echo ""
 }
 

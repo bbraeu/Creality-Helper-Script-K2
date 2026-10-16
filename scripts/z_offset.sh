@@ -1,5 +1,5 @@
 #!/bin/sh
-# z_offset.sh - Save Z-Offset Macros for K2 Plus
+# z_offset.sh - Save Z-Offset Macros for K2
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 Z_CFG=$CONFIG_DIR/z_offset_macros.cfg
@@ -16,7 +16,7 @@ install_z_offset() {
     echo ""
     log_info "Installing Save Z-Offset Macros..."
     cat > "$Z_CFG" << 'EOF'
-# Save Z-Offset Macros — K2 Plus (prtouch_v3 strain-gauge probe)
+# Save Z-Offset Macros — K2 (prtouch_v3 strain-gauge probe)
 
 [gcode_macro SAVE_Z_OFFSET]
 description: Save current live Z offset to printer.cfg

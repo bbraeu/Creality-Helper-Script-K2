@@ -1,5 +1,5 @@
 #!/bin/sh
-# entware.sh - Install Entware package manager on K2 Plus
+# entware.sh - Install Entware package manager on K2
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 
@@ -9,7 +9,7 @@ install_entware() {
     echo "  Entware Package Manager"
     echo "======================================================"
     echo ""
-    echo "  Entware provides hundreds of Linux packages for the K2 Plus."
+    echo "  Entware provides hundreds of Linux packages for the K2."
     echo "  This uses a Python-based wget shim to bootstrap the installer."
     echo ""
     printf "  Continue? [y/n]: "

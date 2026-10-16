@@ -1,0 +1,2 @@
+# Scripts run on the printer (busybox sh / python3) and must keep LF endings
+* text=auto eol=lf

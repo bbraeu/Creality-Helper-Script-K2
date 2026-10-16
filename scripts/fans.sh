@@ -1,5 +1,5 @@
 #!/bin/sh
-# fans.sh - Install/remove Fans Control Macros for K2 Plus
+# fans.sh - Install/remove Fans Control Macros for K2
 
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
@@ -19,13 +19,23 @@ install_fans() {
     log_info "Installing Fans Control Macros..."
     echo ""
 
-    cat > "$FANS_CFG" << 'EOF'
-# Fans Control Macros — K2 Plus
-# Managed by Creality Helper Script
-# Part cooling: fan0 (nozzle_mcu:PB15, enable nozzle_mcu:PB6)
-# Aux fan:      fan2 (PB4+PB3)
-# Chamber fan:  chamber_fan (PA0, temperature_fan, watermark)
-# Chamber heat: chamber_heater (PC12, heater_generic)
+    detect_printer
+    log_info "Detected: $(printer_summary)"
+
+    # fan0 = part cooling, fan2 = aux. Only reference pins this printer has.
+    local fan2_save="" fan2_restore="" fan2_off="" fan0_en=""
+    if [ "$HAS_FAN2" = 1 ]; then
+        fan2_save="  SET_GCODE_VARIABLE MACRO=SAVE_FANS VARIABLE=fan2_speed VALUE={printer['output_pin fan2'].value}"
+        fan2_restore="  SET_FAN2 S={( s.fan2_speed * 255 )|int}"
+        fan2_off="  SET_FAN2 S=0"
+    fi
+    [ "$HAS_FAN0_EN" = 1 ] && fan0_en="  SET_PIN PIN=fan0_en VALUE={% if speed > 0 %}1{% else %}0{% endif %}"
+
+    cat > "$FANS_CFG" << EOF
+# Fans Control Macros — $(printer_summary)
+# Managed by Creality Helper Script (generated from the detected printer.cfg)
+# Part cooling: fan0 | Aux fan: $([ "$HAS_FAN2" = 1 ] && echo fan2 || echo none) | Chamber fan: ${CHAMBER_FAN:-none}
+# Chamber heater: ${CHAMBER_HEATER:-none}
 
 # ── Save / Restore fan state ──────────────────────────────────────────────────
 
@@ -35,14 +45,14 @@ variable_fan0_speed: 0
 variable_fan2_speed: 0
 gcode:
   SET_GCODE_VARIABLE MACRO=SAVE_FANS VARIABLE=fan0_speed VALUE={printer['output_pin fan0'].value}
-  SET_GCODE_VARIABLE MACRO=SAVE_FANS VARIABLE=fan2_speed VALUE={printer['output_pin fan2'].value}
+${fan2_save}
 
 [gcode_macro RESTORE_FANS]
 description: Restore previously saved fan speeds
 gcode:
   {% set s = printer['gcode_macro SAVE_FANS'] %}
   SET_FAN0 S={( s.fan0_speed * 255 )|int}
-  SET_FAN2 S={( s.fan2_speed * 255 )|int}
+${fan2_restore}
 
 # ── Part cooling fan (fan0) ───────────────────────────────────────────────────
 
@@ -50,9 +60,13 @@ gcode:
 description: Set part cooling fan speed. S=0-255
 gcode:
   {% set speed = params.S|default(0)|int %}
-  {% set pwm = (speed / 255.0)|round(4) %}
-  SET_PIN PIN=fan0_en VALUE={% if speed > 0 %}1{% else %}0{% endif %}
+  {% set pwm = (speed / 255.0 * ${FAN0_SCALE})|round(4) %}
+${fan0_en}
   SET_PIN PIN=fan0 VALUE={pwm}
+EOF
+
+    if [ "$HAS_FAN2" = 1 ]; then
+        cat >> "$FANS_CFG" << EOF
 
 # ── Aux fan (fan2) ────────────────────────────────────────────────────────────
 
@@ -60,8 +74,12 @@ gcode:
 description: Set aux fan speed. S=0-255
 gcode:
   {% set speed = params.S|default(0)|int %}
-  {% set pwm = (speed / 255.0)|round(4) %}
+  {% set pwm = (speed / 255.0 * ${FAN2_SCALE})|round(4) %}
   SET_PIN PIN=fan2 VALUE={pwm}
+EOF
+    fi
+
+    cat >> "$FANS_CFG" << EOF
 
 # ── Turn off all output fans ──────────────────────────────────────────────────
 
@@ -69,39 +87,10 @@ gcode:
 description: Turn off all output fans (does not affect hotend_fan auto-control)
 gcode:
   SET_FAN0 S=0
-  SET_FAN2 S=0
-
-# ── Chamber heater control ────────────────────────────────────────────────────
-
-[gcode_macro CHAMBER_HEAT]
-description: Set chamber heater target. Use WAIT=1 to wait for temp. TARGET=degrees
-variable_chamber_target: 0
-gcode:
-  {% set target = params.TARGET|default(0)|float %}
-  {% set wait = params.WAIT|default(0)|int %}
-  SET_HEATER_TEMPERATURE HEATER=chamber_heater TARGET={target}
-  SET_GCODE_VARIABLE MACRO=CHAMBER_HEAT VARIABLE=chamber_target VALUE={target}
-  {% if wait == 1 and target > 0 %}
-    TEMPERATURE_WAIT SENSOR="heater_generic chamber_heater" MINIMUM={target - 3}
-    {action_respond_info("Chamber reached target temperature: %d°C" % target)}
-  {% endif %}
-
-[gcode_macro CHAMBER_COOL]
-description: Disable chamber heater and run cooling fan at full speed
-gcode:
-  SET_HEATER_TEMPERATURE HEATER=chamber_heater TARGET=0
-  SET_TEMPERATURE_FAN_TARGET TEMPERATURE_FAN=chamber_fan TARGET=20
-  {action_respond_info("Chamber cooling: heater off, fan at full speed")}
-
-# ── Convenience: chamber temperature status ───────────────────────────────────
-
-[gcode_macro CHAMBER_STATUS]
-description: Print current chamber temperature and target
-gcode:
-  {% set chamber_temp = printer['heater_generic chamber_heater'].temperature %}
-  {% set chamber_target = printer['heater_generic chamber_heater'].target %}
-  {action_respond_info("Chamber: %.1f°C / target: %.1f°C" % (chamber_temp, chamber_target))}
+${fan2_off}
 EOF
+
+    write_chamber_macros "$FANS_CFG"
 
     add_include_to_printer_cfg "fans_control.cfg"
     restart_klipper force
@@ -110,8 +99,10 @@ EOF
     echo ""
     log_success "Fans Control Macros installed!"
     echo ""
-    log_info "Available macros: SET_FAN0, SET_FAN2, FANS_OFF, SAVE_FANS, RESTORE_FANS"
-    log_info "Chamber macros:   CHAMBER_HEAT, CHAMBER_COOL, CHAMBER_STATUS"
+    local fan_macros="SET_FAN0, FANS_OFF, SAVE_FANS, RESTORE_FANS"
+    [ "$HAS_FAN2" = 1 ] && fan_macros="SET_FAN0, SET_FAN2, FANS_OFF, SAVE_FANS, RESTORE_FANS"
+    log_info "Available macros: $fan_macros"
+    [ -n "$(chamber_macro_names)" ] && log_info "Chamber macros:   $(chamber_macro_names)"
     echo ""
 }
 

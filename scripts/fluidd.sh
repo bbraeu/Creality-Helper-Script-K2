@@ -1,7 +1,7 @@
 #!/bin/sh
-# fluidd.sh - Install, repair, or remove Fluidd for K2 Plus
+# fluidd.sh - Install, repair, or remove Fluidd for K2
 #
-# The K2 Plus ships with Fluidd pre-installed at /usr/share/fluidd served on port 4408.
+# The K2 ships with Fluidd pre-installed at /usr/share/fluidd served on port 4408.
 # This script can:
 #   install  - download and install the latest Fluidd (replaces stock or broken install)
 #   remove   - remove Fluidd static files (nginx block stays, port 4408 will 404)
@@ -14,7 +14,7 @@ FLUIDD_DIR=/usr/share/fluidd
 FLUIDD_URL=https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip
 NGINX_CONF=/etc/nginx/nginx.conf
 
-# Stock nginx server block for Fluidd — matches what ships on the K2 Plus
+# Stock nginx server block for Fluidd — matches what ships on the K2
 STOCK_FLUIDD_BLOCK='    server {
         listen 4408 default_server;
 
@@ -194,7 +194,7 @@ remove_fluidd() {
         return 0
     fi
         echo -e "${YELLOW}WARNING: This will restore stock Fluidd nginx configuration.${NC}"
-    echo "Fluidd itself will NOT be removed as it is pre-installed on the K2 Plus."
+    echo "Fluidd itself will NOT be removed as it is pre-installed on the K2."
     echo ""
     printf "Are you sure? [y/n]: "
     read confirm

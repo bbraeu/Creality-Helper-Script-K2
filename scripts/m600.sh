@@ -1,5 +1,5 @@
 #!/bin/sh
-# m600.sh - M600 filament change support for K2 Plus
+# m600.sh - M600 filament change support for K2
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 M600_CFG=$CONFIG_DIR/m600.cfg
@@ -16,7 +16,7 @@ install_m600() {
     echo ""
     log_info "Installing M600 Support..."
     cat > "$M600_CFG" << 'EOF'
-# M600 Filament Change — K2 Plus
+# M600 Filament Change — K2
 # In CFS/multi-material mode, tool changes are handled by BOX_* macros.
 # This M600 is for single-filament manual filament changes.
 

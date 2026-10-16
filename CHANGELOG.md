@@ -1,5 +1,52 @@
 # Changelog
 
+## [Unreleased] - 2026-10-16 - K2 (base) support
+
+### Changed
+- **Works on the K2 base model (and K2 Pro / K2 Plus).** `system.sh` now detects
+  the hardware from the config Klipper actually loads (printer.cfg and its
+  include tree, not SAVE_CONFIG backups): model (X `position_max`), usable bed
+  area (`[bed_mesh]` mesh_min/max), chamber heater, chamber sensor, chamber fan,
+  `fan0_en` / `fan2` and their PWM `scale`, and `z_tilt`. Checked against
+  Creality's published K2 config (F021_CR0CN200400C10). The menu header shows
+  the detected printer.
+- Fans Control Macros / Useful Macros are generated for the detected hardware:
+  no `CHAMBER_HEAT` / `PID_CHAMBER` without a chamber heater (K2 base),
+  `CHAMBER_STATUS` uses whichever chamber sensor exists, `SET_FAN2` and
+  `Z_TILT_*` only when present. `WARMUP` stays inside the bed mesh area (it
+  drove to X/Y 345 before, which is out of range on a 260 mm bed).
+- `SET_FAN0` / `SET_FAN2` honour the pins' `scale: 255` (S=255 was 1/255 duty).
+  `fan0_en` is a static output on the K2 and is no longer toggled.
+- `motor_control.cfg` restore takes the stock file from this model's directory
+  in `/rom` (matched by bed size) instead of the hard-coded K2 Plus `F008_*`.
+- Shaper macros no longer mention the K2 Plus probe point / 140 N belt target.
+- **KAMP is now KAMP-K2** (grant0013/KAMP-K2 v1.1.0). Plain upstream KAMP never
+  produced an adaptive mesh on the K2 (prtouch_v3 ignores MESH_MIN/MESH_MAX,
+  master-server runs its own full mesh). Installs `restore_bed_mesh.py`, hijacks
+  `G29` / `BED_MESH_CALIBRATE_START_PRINT`, adds the mesh to `START_PRINT`
+  right after the prepare branch (homed and hot; unknown layouts get a warning
+  instead of a guess) (`scripts/kamp_k2_patch.py`, idempotent, UTF-8/CRLF safe). Re-applied on boot after firmware
+  updates. Remove restores `gcode_macro.cfg`.
+- Camera: optional MJPEG stream (`k2plus_mjpeg`, ffmpeg on demand) registered
+  as "K2 Camera MJPEG" for Mobileraker (free version, notification snapshots)
+  and remote viewing.
+- Menu renumbered (see README).
+
+### Added
+- Mobileraker Companion (Entware python3 + virtualenv + procd service).
+- OctoEverywhere and OctoApp Companion (upstream installers, which support the K2).
+- Git Backup (procd service, token stored outside the config folder).
+- Klipper Gcode Shell Command.
+- Moonraker database backup / restore.
+- Tools: update Entware packages, clear logs & cache, system information.
+
+### Fixed
+- nginx `/go2rtc/api/ws` on port 4408 forwarded `?src=k2plus?src=...` when the
+  client sent a query string (stream not found). Existing installs are repaired
+  when Camera Support is installed again.
+- Reinstalling Camera Support no longer injects a duplicate script into Fluidd's
+  `index.html`, and removing it now removes that script.
+
 ## [Unreleased] - 2026-06-17
 
 ### Fixed

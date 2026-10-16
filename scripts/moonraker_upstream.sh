@@ -167,6 +167,20 @@ requirements: scripts/mobileraker-requirements.txt
 managed_services: mobileraker
 EOF
     fi
+    # The helper script itself: needs to be a git checkout for Moonraker
+    if sh "$SCRIPT_DIR/scripts/update.sh" convert > /dev/null 2>&1; then
+        cat >> "$BASE_CONF" << EOF
+
+[update_manager helper-script]
+type: git_repo
+path: $SCRIPT_DIR
+origin: https://github.com/$HELPER_REPO.git
+primary_branch: main
+is_system_service: False
+EOF
+    else
+        log_warn "Helper script not added to Software Updates (converting it to a git checkout failed)."
+    fi
     printf '\n[include moonraker.conf]\n' >> "$BASE_CONF"
 
     # Services Moonraker may manage (restart buttons in Fluidd/Mainsail)

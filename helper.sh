@@ -182,7 +182,8 @@ moonraker_menu() {
 
 installed_version() {
     local sha
-    sha=$(cat "$SCRIPT_DIR/.version" 2>/dev/null)
+    # A git checkout (updatable Moonraker) may have been updated by Moonraker
+    sha=$(PATH=/opt/bin:$PATH git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || cat "$SCRIPT_DIR/.version" 2>/dev/null)
     [ -n "$sha" ] && echo "$sha" | cut -c1-7 || echo "unknown"
 }
 

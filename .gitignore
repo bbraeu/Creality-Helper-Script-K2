@@ -1,0 +1,13 @@
+# Generated on the printer in /mnt/UDISK/helper-script - never part of the
+# repository (the helper directory can be a git checkout updated by Moonraker)
+.installed
+.version
+.git-credentials
+backups/
+go2rtc
+go2rtc.yaml
+go2rtc.yaml.bak
+camera_watchdog.py
+files/kamp/
+*.update
+__pycache__/

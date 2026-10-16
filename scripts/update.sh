@@ -95,8 +95,65 @@ check() if mode == 'check' else update()
 PYEOF
 }
 
+# ── git mode ──────────────────────────────────────────────────────────────────
+# With the updatable Moonraker the helper directory is a git checkout, so
+# Moonraker's update manager can update it too. Then git is the source of truth
+# (both update paths agree), generated files are untracked/ignored.
+export PATH=/opt/bin:/opt/sbin:$PATH
+
+is_git_install() {
+    [ -d "$SCRIPT_DIR/.git" ] && command -v git > /dev/null
+}
+
+git_check() {
+    local old new
+    cd "$SCRIPT_DIR" || return 1
+    if ! git fetch -q origin "$BRANCH" 2> /dev/null; then
+        echo "OFFLINE"
+        return 0
+    fi
+    old=$(git rev-parse HEAD)
+    new=$(git rev-parse "origin/$BRANCH")
+    if [ "$old" = "$new" ]; then
+        echo "CURRENT $new"
+        return 0
+    fi
+    echo "UPDATE $old $new"
+    git log --format='  - %s' "$old..$new" | cut -c1-104 | tail -10
+}
+
+git_update() {
+    local sha
+    cd "$SCRIPT_DIR" || return 1
+    git fetch -q origin "$BRANCH" && git reset -q --hard "origin/$BRANCH" || return 1
+    sha=$(git rev-parse HEAD)
+    echo "$sha" > "$VERSION_FILE"
+    echo "UPDATED $sha (git)"
+}
+
+# Turn a zip install into a git checkout in place (Moonraker's update manager
+# only updates git repositories). Untracked / ignored files are kept.
+convert_to_git() {
+    [ -d "$SCRIPT_DIR/.git" ] && return 0
+    command -v git > /dev/null || { echo "git not found (install Entware)"; return 1; }
+    cd "$SCRIPT_DIR" || return 1
+    if git init -q -b "$BRANCH" &&
+       git remote add origin "https://github.com/$REPO.git" &&
+       git fetch -q origin "$BRANCH" &&
+       git reset -q --hard "origin/$BRANCH" &&
+       git branch -q -u "origin/$BRANCH"; then
+        git rev-parse HEAD > "$VERSION_FILE"
+        echo "CONVERTED $(git rev-parse HEAD)"
+        return 0
+    fi
+    rm -rf "$SCRIPT_DIR/.git"
+    echo "Converting to a git checkout failed"
+    return 1
+}
+
 case "$1" in
-    check)  run check ;;
-    update) run update ;;
-    *)      echo "Usage: $0 [check|update]" ;;
+    check)   if is_git_install; then git_check; else run check; fi ;;
+    update)  if is_git_install; then git_update; else run update; fi ;;
+    convert) convert_to_git ;;
+    *)       echo "Usage: $0 [check|update|convert]" ;;
 esac

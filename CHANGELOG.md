@@ -3,6 +3,14 @@
 ## [Unreleased] - 2026-10-16 - Updatable Moonraker, Entware location, webcam URLs
 
 ### Added
+- **Helper script in Moonraker's Software Updates.** With the updatable
+  Moonraker, `/mnt/UDISK/helper-script` is converted in place into a git
+  checkout (generated files are git-ignored) and listed as
+  `[update_manager helper-script]`; the helper's own updater then uses git
+  too, so both update paths agree.
+- **Weekly Moonraker check** (GitHub Actions): fails and opens an issue when
+  upstream Moonraker requires a newer Python than the K2's Entware 3.11;
+  rebuilds the prebuilt wheels when Moonraker's requirements change.
 - **Updatable Moonraker** (Install menu 1 -> 2, `scripts/moonraker_upstream.sh`).
   Creality's Moonraker (Python 3.9, no git) cannot run the update manager;
   this installs current upstream Moonraker in `/mnt/UDISK/moonraker` with an

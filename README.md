@@ -135,6 +135,12 @@ Option 1 -> 2 replaces it with the current upstream Moonraker (Entware Python 3.
 - SSH client (e.g. PuTTY on Windows)
 - Entware (option 13) for OctoEverywhere, Mobileraker Companion, OctoApp and Git Backup
 
+## Support
+
+If this project saved you some time, you can buy me a coffee:
+
+<a href="https://buymeacoffee.com/braeubernhk"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="40"></a>
+
 ## Credits
 
 - [sw3defy](https://github.com/sw3defy/Creality-Helper-Script-K2-Plus) - K2 Plus Helper Script this fork is based on

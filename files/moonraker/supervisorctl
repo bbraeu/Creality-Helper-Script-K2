@@ -1,0 +1,77 @@
+#!/bin/sh
+# supervisorctl shim for Moonraker's "supervisord_cli" machine provider on the
+# K2 (OpenWrt procd). Lets Moonraker / Fluidd / Mainsail show and restart
+# services. Only on the PATH of the upstream Moonraker service.
+#
+#   supervisorctl status [service...]
+#   supervisorctl start|stop|restart <service>
+#
+# Output follows supervisorctl's format, which Moonraker parses:
+#   klipper          RUNNING   pid 1234, uptime 1:02:03
+#   mobileraker      STOPPED   Not started
+# "status" exits with 3 when a queried service is not running.
+
+DEFAULT_SERVICES="klipper moonraker mobileraker"
+
+pid_of() {
+    case "$1" in
+        klipper)     pgrep -f "klippy/klippy.py" | head -1 ;;
+        moonraker)   pgrep -f "moonraker/moonraker.py" | head -1 ;;
+        mobileraker) pgrep -f "mobileraker.py" | head -1 ;;
+        *)           pidof "$1" | cut -d' ' -f1 ;;
+    esac
+}
+
+# H:MM:SS since the process started
+uptime_of() {
+    awk -v start="$(cut -d' ' -f22 "/proc/$1/stat" 2>/dev/null)" '
+        { s = int($1 - start / 100); printf "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60 }
+    ' /proc/uptime
+}
+
+status() {
+    local rc=0 svc pid
+    [ $# -eq 0 ] && set -- $DEFAULT_SERVICES
+    for svc in "$@"; do
+        pid=$(pid_of "$svc")
+        if [ -n "$pid" ]; then
+            printf "%-16s RUNNING   pid %s, uptime %s\n" "$svc" "$pid" "$(uptime_of "$pid")"
+        elif [ -x "/etc/init.d/$svc" ]; then
+            printf "%-16s STOPPED   Not started\n" "$svc"
+            rc=3
+        else
+            printf "%-16s ERROR     (no such process)\n" "$svc"
+            rc=4
+        fi
+    done
+    return $rc
+}
+
+action="$1"
+[ $# -gt 0 ] && shift
+case "$action" in
+    status)
+        status "$@"
+        exit $?
+        ;;
+    start|stop|restart)
+        for svc in "$@"; do
+            [ -x "/etc/init.d/$svc" ] || { echo "$svc: ERROR (no such process)"; exit 1; }
+            if [ "$svc" = moonraker ]; then
+                # Moonraker restarts itself: detach so the restart survives its own exit
+                ( sleep 1; /etc/init.d/moonraker "$action" ) > /dev/null 2>&1 &
+            else
+                "/etc/init.d/$svc" "$action" > /dev/null 2>&1
+            fi
+            case "$action" in
+                start)   echo "$svc: started" ;;
+                stop)    echo "$svc: stopped" ;;
+                restart) echo "$svc: restarted" ;;
+            esac
+        done
+        ;;
+    *)
+        echo "Usage: supervisorctl status|start|stop|restart [service...]"
+        exit 2
+        ;;
+esac

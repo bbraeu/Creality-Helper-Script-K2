@@ -65,9 +65,12 @@ install_mobileraker() {
 
     SERVICE_ENV="PYTHONPATH=$REPO_DIR" install_service "$SERVICE" "$VENV/bin/python3" "$REPO_DIR/mobileraker.py" -l "$LOGS_DIR" -c "$MR_CONF"
 
-    # No [update_manager mobileraker]: Moonraker's update manager cannot load on
-    # the K2's stock Moonraker (see install_moonraker_include in system.sh).
-    # Update the companion by selecting this menu entry again.
+    # Creality's Moonraker cannot run the update manager (see
+    # install_moonraker_include in system.sh): update by selecting this entry
+    # again. With the upstream Moonraker its generated config lists the companion.
+    if moonraker_is_upstream; then
+        sh "$SCRIPT_DIR/scripts/moonraker_upstream.sh" refresh_config
+    fi
 
     mark_installed "mobileraker_companion"
     echo ""
@@ -120,7 +123,11 @@ remove_mobileraker() {
     remove_moonraker_section "update_manager mobileraker"
     rm -rf "$REPO_DIR" "$VENV"
     rm -f "$MR_CONF"
-    restart_moonraker force
+    if moonraker_is_upstream; then
+        sh "$SCRIPT_DIR/scripts/moonraker_upstream.sh" refresh_config
+    else
+        restart_moonraker force
+    fi
     mark_removed "mobileraker_companion"
     log_success "Mobileraker Companion removed."
 }

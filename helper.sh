@@ -47,7 +47,7 @@ main_menu() {
     print_header
     echo -e "  ${WHITE}[Install] Menu${NC}"
     echo -e "  ${CYAN}--- Step 1: Foundation (install first) ---${NC}"
-    echo -e "    ${YELLOW}1)${NC} ${GREEN}Moonraker Extensions${NC}                  ${WHITE}[recommended first]${NC}"
+    echo -e "    ${YELLOW}1)${NC} ${GREEN}Moonraker (extensions / updatable Moonraker)${NC} ${WHITE}[first]${NC}"
     echo ""
     echo -e "  ${CYAN}--- Step 2: Print macros ---${NC}"
     echo -e "    ${YELLOW}2)${NC} ${GREEN}Fans Control Macros${NC}"
@@ -114,7 +114,7 @@ confirm_install() {
 
 handle_choice() {
     case "$1" in
-        1)  confirm_install "Moonraker Extensions" && sh "$SCRIPTS_DIR/moonraker.sh" install ;;
+        1)  moonraker_menu ;;
         2)  confirm_install "Fans Control Macros" && sh "$SCRIPTS_DIR/fans.sh" install ;;
         3)  confirm_install "Useful Macros" && sh "$SCRIPTS_DIR/useful_macros.sh" install ;;
         4)  confirm_install "Save Z-Offset Macros" && sh "$SCRIPTS_DIR/z_offset.sh" install ;;
@@ -155,6 +155,25 @@ handle_choice() {
     printf "Press Enter to return to main menu..."
     read dummy
     main_menu
+}
+
+# Option 1: extensions for Creality's Moonraker, or the updatable upstream one
+moonraker_menu() {
+    local current="Creality stock"
+    moonraker_is_upstream && current="upstream (updatable)"
+    echo ""
+    echo -e "  ${WHITE}Moonraker${NC} - active: ${CYAN}${current}${NC}"
+    echo ""
+    echo -e "    ${YELLOW}1)${NC} ${GREEN}Moonraker Extensions${NC}  (persistent moonraker.conf for Creality's Moonraker)"
+    echo -e "    ${YELLOW}2)${NC} ${GREEN}Updatable Moonraker${NC}   (current upstream Moonraker; Software Updates in Fluidd work)"
+    echo -e "    ${YELLOW}0)${NC} ${RED}Back${NC}"
+    echo ""
+    printf "  Enter choice: "
+    read subchoice
+    case "$subchoice" in
+        1) confirm_install "Moonraker Extensions" && sh "$SCRIPTS_DIR/moonraker.sh" install ;;
+        2) sh "$SCRIPTS_DIR/moonraker_upstream.sh" install ;;
+    esac
 }
 
 # ── Self-update ───────────────────────────────────────────────────────────────
@@ -205,7 +224,7 @@ remove_menu() {
     print_header
     echo -e "  ${WHITE}[Remove] Menu${NC}"
     echo ""
-    echo -e "    ${YELLOW}1)${NC}  ${GREEN}Moonraker Extensions${NC}"
+    echo -e "    ${YELLOW}1)${NC}  ${GREEN}Moonraker Extensions / switch back to Creality's Moonraker${NC}"
     echo -e "    ${YELLOW}2)${NC}  ${GREEN}Fans Control Macros${NC}"
     echo -e "    ${YELLOW}3)${NC}  ${GREEN}Useful Macros${NC}"
     echo -e "    ${YELLOW}4)${NC}  ${GREEN}Save Z-Offset Macros${NC}"
@@ -229,7 +248,11 @@ remove_menu() {
     printf "  ${GREEN}Enter choice:${NC} "
     read choice
     case "$choice" in
-        1)  sh "$SCRIPTS_DIR/moonraker.sh" remove ;;
+        1)  if moonraker_is_upstream; then
+                sh "$SCRIPTS_DIR/moonraker_upstream.sh" remove
+            else
+                sh "$SCRIPTS_DIR/moonraker.sh" remove
+            fi ;;
         2)  sh "$SCRIPTS_DIR/fans.sh" remove ;;
         3)  sh "$SCRIPTS_DIR/useful_macros.sh" remove ;;
         4)  sh "$SCRIPTS_DIR/z_offset.sh" remove ;;

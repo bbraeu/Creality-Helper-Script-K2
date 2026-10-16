@@ -41,6 +41,13 @@ restart_moonraker() {
         [ "$confirm" != "y" ] && [ "$confirm" != "Y" ] && { log_info "Cancelled."; return 0; }
     fi
     log_info "Restarting Moonraker..."
+    if moonraker_is_upstream; then
+        /etc/init.d/moonraker restart
+        sleep 5
+        pgrep -f "moonraker.py" > /dev/null && log_success "Moonraker restarted successfully." \
+            || log_error "Moonraker failed to restart. Check $LOGS_DIR/moonraker.log"
+        return 0
+    fi
     # Kill ALL running moonraker instances (stock + helper script)
     for pid in $(ps aux | grep moonraker.py | grep -v grep | awk '{print $1}'); do
         kill "$pid" 2>/dev/null
@@ -76,6 +83,22 @@ restart_camera() {
     /etc/rc.d/S97webrtc restart
     sleep 2
     log_success "Camera service restarted."
+}
+
+# ── Moonraker flavour ─────────────────────────────────────────────────────────
+# Creality's Moonraker (/usr/share/moonraker) or the updatable upstream one
+# installed by moonraker_upstream.sh (/mnt/UDISK/moonraker)
+
+moonraker_is_upstream() {
+    grep -q "K2 helper: upstream Moonraker" /etc/init.d/moonraker 2>/dev/null
+}
+
+moonraker_components_dir() {
+    if moonraker_is_upstream; then
+        echo /mnt/UDISK/moonraker/moonraker/components
+    else
+        echo /usr/share/moonraker/components
+    fi
 }
 
 # ── Entware / services ────────────────────────────────────────────────────────
@@ -226,6 +249,7 @@ system_info() {
     echo ""
     echo -e "  ${GREEN}Printer:${NC}    $(printer_summary)"
     echo -e "  ${GREEN}Hostname:${NC}   $(cat /proc/sys/kernel/hostname)"
+    echo -e "  ${GREEN}Moonraker:${NC}  $(moonraker_is_upstream && echo "upstream (updatable)" || echo "Creality stock") $(python3 -c "import json,urllib.request;print(json.load(urllib.request.urlopen('http://127.0.0.1:7125/server/info',timeout=3))['result'].get('moonraker_version','?'))" 2>/dev/null)"
     echo -e "  ${GREEN}IP address:${NC} ${ip:-unknown}"
     echo -e "  ${GREEN}OS:${NC}         $(. /etc/openwrt_release 2>/dev/null; echo "${DISTRIB_DESCRIPTION:-unknown}")"
     echo -e "  ${GREEN}Kernel:${NC}     $(uname -r) ($(uname -m))"
@@ -501,6 +525,8 @@ MOONRAKER_STOCK_CONF=/usr/share/moonraker/moonraker.conf
 
 # Patch S56moonraker to use our config wrapper instead of the stock one
 patch_moonraker_startup() {
+    # The upstream Moonraker service has its own config handling
+    moonraker_is_upstream && return 0
     if grep -q "CONF=/mnt/UDISK" "$MOONRAKER_RC" 2>/dev/null; then
         log_info "Moonraker startup already patched."
         return 0
@@ -720,6 +746,10 @@ patch_stock_configs() {
 # from the menu (a print may be running).
 ensure_addons() {
     local changed=0
+    # Firmware updates restore Creality's Moonraker init script
+    if is_installed "moonraker_upstream"; then
+        sh "$SCRIPT_DIR/scripts/moonraker_upstream.sh" ensure "$1"
+    fi
     if is_installed "gcode_shell_command"; then
         sh "$SCRIPT_DIR/scripts/shell_command.sh" ensure
         [ $? -eq 2 ] && changed=1

@@ -4,7 +4,7 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 TIMELAPSE_URL=https://github.com/mainsail-crew/moonraker-timelapse/archive/refs/heads/main.zip
 TIMELAPSE_DIR=/mnt/UDISK/printer_data/timelapse
-TIMELAPSE_COMPONENT=/usr/share/moonraker/components/timelapse.py
+TIMELAPSE_COMPONENT=$(moonraker_components_dir)/timelapse.py
 
 install_timelapse() {
 

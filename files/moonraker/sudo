@@ -1,0 +1,5 @@
+#!/bin/sh
+# sudo shim for Moonraker on the K2: everything already runs as root.
+# Moonraker calls "sudo reboot" / "sudo poweroff" for the machine actions.
+[ "$1" = "-S" ] && { shift; cat > /dev/null; }
+exec "$@"

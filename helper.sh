@@ -93,6 +93,7 @@ main_menu() {
     echo -e "   ${YELLOW}30)${NC} ${GREEN}Update Entware packages${NC}"
     echo -e "   ${YELLOW}31)${NC} ${GREEN}Clear logs & cache${NC}"
     echo -e "   ${YELLOW}32)${NC} ${GREEN}System information${NC}"
+    echo -e "   ${YELLOW}33)${NC} ${GREEN}Update helper script${NC}               ${WHITE}[installed: $(installed_version)]${NC}"
     echo ""
     echo -e "    ${YELLOW}0)${NC} ${RED}Exit${NC}"
     echo ""
@@ -142,6 +143,7 @@ handle_choice() {
         30) sh "$SCRIPTS_DIR/system.sh" update_entware ;;
         31) sh "$SCRIPTS_DIR/system.sh" clear_logs_cache ;;
         32) sh "$SCRIPTS_DIR/system.sh" system_info ;;
+        33) run_update ;;
         0)  echo ""; echo "Goodbye!"; echo ""; exit 0 ;;
         *)  echo -e "${RED}Invalid choice.${NC}"; sleep 1 ;;
     esac
@@ -149,6 +151,50 @@ handle_choice() {
     printf "Press Enter to return to main menu..."
     read dummy
     main_menu
+}
+
+# ── Self-update ───────────────────────────────────────────────────────────────
+# scripts/update.sh compares the commit SHA in .version with the latest commit
+# on GitHub. HELPER_SKIP_UPDATE=1 skips the check at start (e.g. offline use).
+
+installed_version() {
+    local sha
+    sha=$(cat "$SCRIPT_DIR/.version" 2>/dev/null)
+    [ -n "$sha" ] && echo "$sha" | cut -c1-7 || echo "unknown"
+}
+
+check_for_update() {
+    [ "$HELPER_SKIP_UPDATE" = 1 ] && return 0
+    echo "Checking for helper script updates..."
+    local result old new answer
+    result=$(sh "$SCRIPTS_DIR/update.sh" check 2>/dev/null)
+    case "$result" in
+        UPDATE*) ;;
+        *) return 0 ;;
+    esac
+    old=$(echo "$result" | head -1 | cut -d' ' -f2 | cut -c1-7)
+    new=$(echo "$result" | head -1 | cut -d' ' -f3 | cut -c1-7)
+    echo ""
+    echo -e "${YELLOW}Helper script update available:${NC} $old -> $new"
+    echo "$result" | tail -n +2
+    echo ""
+    printf "Update now? [Y/n]: "
+    read answer
+    case "$answer" in
+        n|N) return 0 ;;
+    esac
+    run_update
+}
+
+# Install the latest commit and restart helper.sh with the new files
+run_update() {
+    if sh "$SCRIPTS_DIR/update.sh" update; then
+        log_success "Helper script updated - restarting..."
+        sleep 1
+        HELPER_SKIP_UPDATE=1 exec sh "$SCRIPT_DIR/helper.sh"
+    else
+        log_error "Update failed - keeping the installed version."
+    fi
 }
 
 remove_menu() {
@@ -208,7 +254,13 @@ remove_menu() {
 
 . "$SCRIPTS_DIR/system.sh"
 check_root
+if [ "$1" = "--update" ]; then
+    # Non-interactive update (e.g. over SSH): sh helper.sh --update
+    sh "$SCRIPTS_DIR/update.sh" update
+    exit $?
+fi
 check_printer
+check_for_update
 detect_printer
 patch_stock_configs
 ensure_addons

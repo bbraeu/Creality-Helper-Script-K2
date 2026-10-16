@@ -9,6 +9,19 @@ GO2RTC_YAML=$SCRIPT_DIR/go2rtc.yaml
 K2RTC=$SCRIPT_DIR/k2rtc.py
 WATCHDOG=$SCRIPT_DIR/camera_watchdog.py
 
+# Print the first ffmpeg with version >= 5 (go2rtc refuses older ones for transcoding)
+find_ffmpeg5() {
+    local f major
+    for f in /opt/bin/ffmpeg /usr/bin/ffmpeg; do
+        [ -x "$f" ] || continue
+        major=$("$f" -version 2>/dev/null | sed -n '1s/^ffmpeg version n\{0,1\}\([0-9]\{1,\}\).*/\1/p')
+        if [ -n "$major" ] && [ "$major" -ge 5 ]; then
+            echo "$f"
+            return 0
+        fi
+    done
+}
+
 install_camera() {
     echo ""
     echo ""
@@ -30,20 +43,36 @@ install_camera() {
 
     # Mobileraker shows go2rtc WebRTC only to supporters, and only MJPEG
     # webcams can provide Companion notification snapshots. An extra MJPEG
-    # stream (H264 -> MJPEG via ffmpeg, only while someone watches) covers both.
+    # camera covers both. Live MJPEG = H264 -> MJPEG transcode by go2rtc, which
+    # needs ffmpeg >= 5 (the K2 ships 4.3: "ffmpeg: unsupported version");
+    # Entware has 5.x. Without it, snapshot mode polls frame.jpeg (~1 fps),
+    # which works with the stock ffmpeg.
     echo ""
     echo "  Add an MJPEG camera for Mobileraker / OctoEverywhere?"
     echo "  (free Mobileraker version, notification snapshots, remote viewing;"
-    echo "   transcodes with ffmpeg - costs CPU only while it is being watched)"
+    echo "   live mode transcodes with ffmpeg - costs CPU only while it is watched)"
     printf "  Add MJPEG camera? [y/n]: "
     read add_mjpeg
+    MJPEG_MODE=none
     FFMPEG_BIN=""
     if [ "$add_mjpeg" = "y" ] || [ "$add_mjpeg" = "Y" ]; then
-        for f in /usr/bin/ffmpeg /opt/bin/ffmpeg; do
-            [ -x "$f" ] && { FFMPEG_BIN=$f; break; }
-        done
-        if [ -z "$FFMPEG_BIN" ]; then
-            log_warn "ffmpeg not found - skipping the MJPEG camera (install Entware, then: opkg install ffmpeg)."
+        FFMPEG_BIN=$(find_ffmpeg5)
+        if [ -z "$FFMPEG_BIN" ] && [ -x /opt/bin/opkg ]; then
+            echo ""
+            echo "  Live MJPEG needs ffmpeg 5 or newer; the K2 ships ffmpeg 4."
+            printf "  Install ffmpeg 5 from Entware (about 15 MB)? [y/n]: "
+            read install_ffmpeg
+            if [ "$install_ffmpeg" = "y" ] || [ "$install_ffmpeg" = "Y" ]; then
+                opkg_install ffmpeg && FFMPEG_BIN=$(find_ffmpeg5)
+            fi
+        fi
+        if [ -n "$FFMPEG_BIN" ]; then
+            MJPEG_MODE=stream
+            log_info "MJPEG camera: live stream (ffmpeg: $FFMPEG_BIN)"
+        else
+            MJPEG_MODE=snapshot
+            log_info "MJPEG camera: snapshot mode (about 1 frame per second)."
+            [ -x /opt/bin/opkg ] || log_info "For live MJPEG install Entware, then re-run Camera Support."
         fi
     fi
 
@@ -64,11 +93,12 @@ print('Downloaded go2rtc')
     # Get printer IP
     PRINTER_IP=$(python3 -c "import subprocess; print(subprocess.check_output(['ip', 'route', 'get', '1']).decode().split('src')[1].strip().split()[0])")
 
-    # k2plus_mjpeg reads k2plus via go2rtc's RTSP server (:8554) on demand;
-    # lower width / -r if CPU load while printing is too high
+    # k2plus_mjpeg reads k2plus via go2rtc's RTSP server (:8554) on demand.
+    # The camera delivers 1280x720@15; lower -r (or add #width=640) if CPU
+    # load while printing is too high
     MJPEG_STREAM=""
-    [ -n "$FFMPEG_BIN" ] && MJPEG_STREAM='  k2plus_mjpeg:
-    - "ffmpeg:k2plus#video=mjpeg#width=1280#raw=-r 10"'
+    [ "$MJPEG_MODE" = stream ] && MJPEG_STREAM='  k2plus_mjpeg:
+    - "ffmpeg:k2plus#video=mjpeg#raw=-r 10"'
 
     # Create go2rtc config
     cat > $GO2RTC_YAML << YAML
@@ -185,7 +215,8 @@ else:
     # Add camera(s) to Moonraker (shared by Fluidd, Mainsail and Mobileraker).
     # Absolute URLs: Mobileraker resolves relative ones against port 80 and
     # maps them through OctoEverywhere only when the host matches its printer IP.
-    MJPEG=$([ -n "$FFMPEG_BIN" ] && echo 1 || echo 0) python3 -c "
+    # Port 4408 (stock Fluidd) always exists; 4409 only when Mainsail is installed.
+    MJPEG=$MJPEG_MODE python3 -c "
 import urllib.request, json, os
 import subprocess; ip = subprocess.check_output(['ip', 'route', 'get', '1']).decode().split('src')[1].strip().split()[0]
 for name in ['K2 Camera', 'K2 Camera Mainsail', 'K2 Camera MJPEG']:
@@ -194,27 +225,43 @@ for name in ['K2 Camera', 'K2 Camera Mainsail', 'K2 Camera MJPEG']:
         urllib.request.urlopen(req)
     except: pass
 
+snapshot = 'http://' + ip + ':4408/go2rtc/api/frame.jpeg?src=k2plus'
 camera = {
     'name': 'K2 Camera',
     'location': 'printer',
     'service': 'webrtc-go2rtc',
     'target_fps': 15,
-    'stream_url': 'http://' + ip + ':4409/go2rtc/',
-    'snapshot_url': 'http://' + ip + ':4409/go2rtc/api/frame.jpeg?src=k2plus',
+    'stream_url': 'http://' + ip + ':4408/go2rtc/',
+    'snapshot_url': snapshot,
     'flip_horizontal': False,
     'flip_vertical': False,
     'rotation': 0
 }
 cameras = [camera]
-if os.environ.get('MJPEG') == '1':
+mode = os.environ.get('MJPEG')
+if mode == 'stream':
     cameras.append({
         'name': 'K2 Camera MJPEG',
         'location': 'printer',
         'service': 'mjpegstreamer',
         'target_fps': 10,
         'target_fps_idle': 2,
-        'stream_url': 'http://' + ip + ':4409/go2rtc/api/stream.mjpeg?src=k2plus_mjpeg',
-        'snapshot_url': 'http://' + ip + ':4409/go2rtc/api/frame.jpeg?src=k2plus',
+        'stream_url': 'http://' + ip + ':4408/go2rtc/api/stream.mjpeg?src=k2plus_mjpeg',
+        'snapshot_url': snapshot,
+        'flip_horizontal': False,
+        'flip_vertical': False,
+        'rotation': 0
+    })
+elif mode == 'snapshot':
+    # Clients poll snapshot_url; works with the stock ffmpeg 4
+    cameras.append({
+        'name': 'K2 Camera MJPEG',
+        'location': 'printer',
+        'service': 'mjpegstreamer-adaptive',
+        'target_fps': 2,
+        'target_fps_idle': 1,
+        'stream_url': snapshot,
+        'snapshot_url': snapshot,
         'flip_horizontal': False,
         'flip_vertical': False,
         'rotation': 0

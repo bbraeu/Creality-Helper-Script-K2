@@ -25,6 +25,22 @@ sh /mnt/UDISK/helper-script/helper.sh
 
 The menu header shows what was detected, e.g. `Detected: K2 (no chamber heater, bed mesh 20,20 to 255,255)`.
 
+## Updating
+
+The helper updates itself. The commit it was installed from is stored in
+`/mnt/UDISK/helper-script/.version`; on every start `helper.sh` compares it with the
+latest commit on GitHub, lists what changed and offers the update (Enter = yes).
+You can also update from the menu (Tools → 33) or non-interactively over SSH:
+
+```sh
+sh /mnt/UDISK/helper-script/helper.sh --update
+```
+
+Only the script files are replaced. Your installed features, `go2rtc.yaml`, backups
+and other generated files are kept. Set `HELPER_SKIP_UPDATE=1` to skip the check
+(e.g. without internet). Features whose generated config changed (macros, camera)
+pick up the change when you reinstall them from the menu.
+
 ## Features
 
 | Option | Feature |
@@ -39,7 +55,7 @@ The menu header shows what was detected, e.g. `Detected: K2 (no chamber heater, 
 | 8 | Fluidd (install/update/repair - port 4408) |
 | 9 | Mainsail (install/update/repair - port 4409) |
 | 10 | Moonraker Timelapse |
-| 11 | Camera Support for Fluidd, Mainsail and Mobileraker (WebRTC + optional MJPEG via go2rtc) |
+| 11 | Camera Support for Fluidd, Mainsail and Mobileraker (WebRTC + optional MJPEG via go2rtc; live MJPEG needs Entware ffmpeg 5) |
 | 12 | HelixScreen (modern touchscreen UI) |
 | 13 | Entware Package Manager |
 | 14 | OctoEverywhere |
@@ -48,7 +64,7 @@ The menu header shows what was detected, e.g. `Detected: K2 (no chamber heater, 
 | 17 | Git Backup |
 | 18 | Klipper Gcode Shell Command |
 | 20-23 | Backup / restore Klipper configuration and Moonraker database |
-| 24-32 | Tools: restarts, logs, Entware update, clear logs & cache, system information |
+| 24-33 | Tools: restarts, logs, Entware update, clear logs & cache, system information, update helper script |
 
 ## K2 (base) differences
 

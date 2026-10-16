@@ -107,7 +107,6 @@ validate_config: False
 
 [file_manager]
 queue_gcode_uploads: True
-enable_inotify_warnings: False
 
 [data_store]
 temperature_store_size: 600

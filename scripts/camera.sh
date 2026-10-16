@@ -276,31 +276,8 @@ for cam in cameras:
     print('Camera added to Moonraker: ' + cam['name'])
 "
 
-    # Update Fluidd index.html with iframe keepalive and auto-reload
-    python3 -c "
-import re, socket
-import subprocess; ip = subprocess.check_output(['ip', 'route', 'get', '1']).decode().split('src')[1].strip().split()[0]
-content = open('/usr/share/fluidd/index.html').read()
-content = re.sub(r'<iframe[^>]*go2rtc_keepalive[^>]*>.*?</iframe>', '', content)
-content = re.sub(r'<script>\nvar cameraReady.*?</script>', '', content, flags=re.DOTALL)
-content = re.sub(r'<script>\nfunction enableCamera\(\).*?</script>', '', content, flags=re.DOTALL)
-script = '''<script>
-function enableCamera() {
-  try {
-    var s = document.querySelector(\"#app\").__vue__.\$store;
-    var cams = s.state.webcams.webcams;
-    if(cams && cams.length > 0 && !cams[0].enabled) {
-      cams[0].enabled = true;
-      s.state.webcams.webcams.splice(0, 1, cams[0]);
-    }
-  } catch(e) {}
-}
-setTimeout(enableCamera, 2000);
-</script>'''
-content = content.replace('</body>', script + '</body>')
-open('/usr/share/fluidd/index.html', 'w').write(content)
-print('Fluidd index.html updated')
-"
+    # Fluidd: enable the WebRTC camera (Creality's Moonraker has no "enabled" flag)
+    python3 "$SCRIPT_DIR/scripts/fluidd_camera.py" install
 
     # Update Mainsail index.html with enabled cam injection
     python3 -c "
@@ -392,16 +369,8 @@ for name in ['K2 Camera', 'K2 Camera Mainsail', 'K2 Camera MJPEG']:
     except: pass
 "
 
-    # Restore Fluidd index.html
-    python3 -c "
-import re
-content = open('/usr/share/fluidd/index.html').read()
-content = re.sub(r'<iframe[^>]*go2rtc_keepalive[^>]*></iframe>', '', content)
-content = re.sub(r'<script>\nvar cameraReady.*?</script>', '', content, flags=re.DOTALL)
-content = re.sub(r'<script>\nfunction enableCamera\(\).*?</script>', '', content, flags=re.DOTALL)
-open('/usr/share/fluidd/index.html', 'w').write(content)
-print('Fluidd index.html restored')
-"
+    # Remove the Fluidd camera script
+    python3 "$SCRIPT_DIR/scripts/fluidd_camera.py" remove
 
     # Restore Mainsail index.html
     python3 -c "

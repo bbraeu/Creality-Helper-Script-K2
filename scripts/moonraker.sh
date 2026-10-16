@@ -52,7 +52,8 @@ EOF
     echo ""
     log_success "Moonraker Extensions installed successfully!"
     echo ""
-    log_info "Update Manager is now available in Fluidd under Settings → Software Updates."
+    log_info "Note: Moonraker's update manager is not supported on the K2 (stock Moonraker has no git install)."
+    log_info "The helper updates itself; reinstall features from the menu to update them."
     log_info "Object processing enabled (required for KAMP)."
     echo ""
 }

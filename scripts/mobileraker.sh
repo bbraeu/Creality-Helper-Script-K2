@@ -65,17 +65,9 @@ install_mobileraker() {
 
     SERVICE_ENV="PYTHONPATH=$REPO_DIR" install_service "$SERVICE" "$VENV/bin/python3" "$REPO_DIR/mobileraker.py" -l "$LOGS_DIR" -c "$MR_CONF"
 
-    # Lets Moonraker's update manager list (and update) the companion
-    if [ -f "$MOONRAKER_CONF" ]; then
-        add_moonraker_section "update_manager mobileraker" "[update_manager mobileraker]
-type: git_repo
-path: $REPO_DIR
-origin: $REPO_URL
-primary_branch: main
-virtualenv: $VENV
-requirements: scripts/mobileraker-requirements.txt"
-        restart_moonraker force
-    fi
+    # No [update_manager mobileraker]: Moonraker's update manager cannot load on
+    # the K2's stock Moonraker (see install_moonraker_include in system.sh).
+    # Update the companion by selecting this menu entry again.
 
     mark_installed "mobileraker_companion"
     echo ""

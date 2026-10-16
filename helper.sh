@@ -47,7 +47,7 @@ main_menu() {
     print_header
     echo -e "  ${WHITE}[Install] Menu${NC}"
     echo -e "  ${CYAN}--- Step 1: Foundation (install first) ---${NC}"
-    echo -e "    ${YELLOW}1)${NC} ${GREEN}Moonraker Extensions & Update Manager${NC}  ${WHITE}[recommended first]${NC}"
+    echo -e "    ${YELLOW}1)${NC} ${GREEN}Moonraker Extensions${NC}                  ${WHITE}[recommended first]${NC}"
     echo ""
     echo -e "  ${CYAN}--- Step 2: Print macros ---${NC}"
     echo -e "    ${YELLOW}2)${NC} ${GREEN}Fans Control Macros${NC}"

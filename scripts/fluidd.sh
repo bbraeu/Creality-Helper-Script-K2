@@ -169,6 +169,11 @@ install_fluidd() {
     # Ensure nginx block is in place
     restore_fluidd_nginx_block
 
+    # A new index.html drops the camera script Camera Support injected
+    if is_installed "camera_support"; then
+        python3 "$SCRIPT_DIR/scripts/fluidd_camera.py" install
+    fi
+
     # Restart nginx to serve updated files
     restart_nginx force
 

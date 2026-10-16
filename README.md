@@ -45,7 +45,7 @@ pick up the change when you reinstall them from the menu.
 
 | Option | Feature |
 |--------|---------|
-| 1 | Moonraker Extensions & Update Manager |
+| 1 | Moonraker Extensions (persistent moonraker.conf, object processing) |
 | 2 | Fans Control Macros |
 | 3 | Useful Macros (PID, bed leveling, warmup, chamber status) |
 | 4 | Save Z-Offset Macros |

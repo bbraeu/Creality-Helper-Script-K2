@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased] - 2026-10-16 - Fluidd camera, update_manager error
+
+### Fixed
+- **Camera not shown in Fluidd.** Creality's Moonraker does not store the
+  webcam `enabled` flag, so Fluidd treats every webcam as disabled; the old
+  injected script only enabled the first one (now the MJPEG camera). The new
+  `scripts/fluidd_camera.py` enables the WebRTC camera and leaves the MJPEG
+  camera (for Mobileraker) off, so ffmpeg does not transcode whenever Fluidd
+  is open. Re-applied after a Fluidd update.
+- **"Moonraker has failed plugins: update_manager".** Moonraker's update
+  manager cannot load on the K2's stock Moonraker (no git install, missing
+  `scripts/` folder). Mobileraker Companion no longer adds
+  `[update_manager mobileraker]`; existing sections are removed automatically
+  at helper start / boot. Menu entry 1 is now just "Moonraker Extensions".
+
 ## [Unreleased] - 2026-10-16 - Self-update, camera fixes
 
 ### Added

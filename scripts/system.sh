@@ -742,6 +742,21 @@ $include_line
         sed -i "s/queue_gcode_uploads: False/queue_gcode_uploads: True/" "$real_conf"
         log_success "Enabled queue_gcode_uploads in $real_conf"
     fi
+
+    # Moonraker's update_manager cannot load on the K2: Creality ships Moonraker
+    # without git or its scripts/ folder, so the built-in moonraker updater fails
+    # ("Invalid path for option requirements ... /usr/share/scripts/...") and the
+    # whole component is dropped. Any [update_manager ...] section then shows up
+    # as "Moonraker has failed plugins" in Fluidd/Mainsail. Older helper versions
+    # added one for Mobileraker Companion - remove it; updates go through the helper.
+    if grep -q "^\[update_manager mobileraker\]" "$udisk_conf" 2>/dev/null; then
+        remove_moonraker_section "update_manager mobileraker"
+        log_info "Removed [update_manager mobileraker] (update_manager is not supported by the K2's Moonraker)."
+        restart_moonraker force
+    fi
+    if grep -q "^\[update_manager" "$udisk_conf" "$real_conf" 2>/dev/null; then
+        log_warn "An [update_manager] section is configured, but Moonraker's update manager cannot run on the K2's stock Moonraker - remove it to clear the 'failed plugins' warning."
+    fi
 }
 
 # ── Entry point ───────────────────────────────────────────────────────────────

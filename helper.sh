@@ -267,6 +267,7 @@ if [ "$1" = "--update" ]; then
 fi
 check_printer
 check_for_update
+check_entware_location
 detect_printer
 patch_stock_configs
 ensure_addons

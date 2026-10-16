@@ -210,7 +210,10 @@ else:
 "
 
     # Add nginx proxy for go2rtc on port 4408 (Fluidd) and 4409 (Mainsail)
-    python3 $SCRIPT_DIR/nginx_go2rtc.py
+    # Also maps the mjpg-streamer style /webcam/?action=stream|snapshot URLs
+    # (Mobileraker / Moonraker defaults) to go2rtc
+    K2CAM_STREAM=$([ "$MJPEG_MODE" = stream ] && echo k2plus_mjpeg || echo snapshot) \
+        python3 $SCRIPT_DIR/nginx_go2rtc.py
 
     # Add camera(s) to Moonraker (shared by Fluidd, Mainsail and Mobileraker).
     # Absolute URLs: Mobileraker resolves relative ones against port 80 and
@@ -348,14 +351,7 @@ print('Removed from rc.local')
 "
 
     # Remove nginx config
-    python3 -c "
-import re
-content = open('/etc/nginx/nginx.conf').read()
-content = re.sub(r'\s*location /go2rtc/.*?}\n', '', content, flags=re.DOTALL)
-content = re.sub(r'\s*location /go2rtc/api/ws.*?}\n', '', content, flags=re.DOTALL)
-open('/etc/nginx/nginx.conf', 'w').write(content)
-print('Nginx restored')
-"
+    python3 $SCRIPT_DIR/nginx_go2rtc.py remove
     /etc/rc.d/S80nginx restart
 
     # Remove cameras from Moonraker

@@ -89,6 +89,67 @@ require_entware() {
     export PATH=/opt/bin:/opt/sbin:$PATH
 }
 
+# Entware belongs on /mnt/UDISK: /opt on the 240 MB system overlay fills up
+# (Python + ffmpeg alone are ~150 MB) and then breaks writes to /etc, nginx,
+# opkg's own database, ... /opt becomes a symlink to it.
+ENTWARE_DIR=/mnt/UDISK/opt
+
+# Point /opt at $ENTWARE_DIR, moving an existing Entware there first
+use_udisk_for_opt() {
+    [ -L /opt ] && return 0
+    mkdir -p "$ENTWARE_DIR"
+    if [ -d /opt ] && [ -n "$(ls -A /opt 2>/dev/null)" ]; then
+        log_info "Moving /opt to $ENTWARE_DIR (this takes a few minutes)..."
+        [ -x /etc/init.d/mobileraker ] && /etc/init.d/mobileraker stop
+        killall ffmpeg 2>/dev/null
+        cp -a /opt/. "$ENTWARE_DIR/" || { log_error "Copy failed - /opt left unchanged."; return 1; }
+        if [ "$(find /opt | wc -l)" != "$(find "$ENTWARE_DIR" | wc -l)" ]; then
+            log_error "Copy incomplete - /opt left unchanged."
+            return 1
+        fi
+        rm -rf /opt
+        [ -x /etc/init.d/mobileraker ] && /etc/init.d/mobileraker start
+    else
+        rmdir /opt 2>/dev/null
+    fi
+    ln -s "$ENTWARE_DIR" /opt && log_success "/opt -> $ENTWARE_DIR"
+    repair_opkg_status
+}
+
+# Rebuild opkg's package database from its per-package control files
+# (it gets truncated when the filesystem runs full during an install)
+repair_opkg_status() {
+    local status=/opt/lib/opkg/status f
+    [ -d /opt/lib/opkg/info ] || return 0
+    # Intact = ends with a newline and lists every installed package
+    if [ -f "$status" ] && [ -z "$(tail -c 1 "$status")" ] \
+       && [ "$(grep -c '^Package:' "$status")" -ge "$(ls /opt/lib/opkg/info/*.control 2>/dev/null | wc -l)" ]; then
+        return 0
+    fi
+    cp "$status" "$status.broken" 2>/dev/null
+    for f in /opt/lib/opkg/info/*.control; do
+        awk 1 "$f"
+        echo "Status: install ok installed"
+        echo "Installed-Time: $(date +%s)"
+        echo ""
+    done > "$status.new" && mv "$status.new" "$status"
+    log_success "Repaired opkg package database ($(grep -c '^Package:' "$status") packages)"
+}
+
+# Offer the move when Entware still lives on the system overlay
+check_entware_location() {
+    [ -x /opt/bin/opkg ] && [ ! -L /opt ] || return 0
+    local free_kb answer
+    free_kb=$(df -k /overlay 2>/dev/null | awk 'NR==2 {print $4}')
+    echo ""
+    log_warn "Entware is installed on the small system partition (${free_kb:-?} KB free)."
+    log_warn "When it runs full, nginx, Moonraker and opkg can no longer save files."
+    printf "Move Entware to /mnt/UDISK now? [Y/n]: "
+    read answer
+    case "$answer" in n|N) return 0 ;; esac
+    use_udisk_for_opt
+}
+
 opkg_install() {
     log_info "Installing packages: $*"
     /opt/bin/opkg update > /dev/null 2>&1

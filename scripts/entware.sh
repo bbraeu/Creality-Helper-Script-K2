@@ -35,6 +35,9 @@ install_entware() {
         return 0
     fi
 
+    # Install into /mnt/UDISK/opt, not onto the 240 MB system overlay
+    use_udisk_for_opt || return 1
+
     # Create dummy wget
     log_info "Creating dummy wget..."
     mkdir -p ~/bin
@@ -139,7 +142,7 @@ remove_entware() {
     read confirm
     [ "$confirm" != "y" ] && [ "$confirm" != "Y" ] && { log_info "Cancelled."; return 0; }
 
-    rm -rf /opt
+    rm -rf /opt "$ENTWARE_DIR"
     python3 -c "
 content = open('/etc/rc.local').read()
 content = content.replace('# Entware\n[ -f /opt/etc/init.d/rc.unslung ] && /opt/etc/init.d/rc.unslung start\nexport PATH=/opt/bin:/opt/sbin:\$PATH\n', '')

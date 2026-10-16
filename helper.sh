@@ -180,11 +180,9 @@ moonraker_menu() {
 # scripts/update.sh compares the commit SHA in .version with the latest commit
 # on GitHub. HELPER_SKIP_UPDATE=1 skips the check at start (e.g. offline use).
 
+# Installed release (e.g. v2.0.0); a git checkout may have been updated by Moonraker
 installed_version() {
-    local sha
-    # A git checkout (updatable Moonraker) may have been updated by Moonraker
-    sha=$(PATH=/opt/bin:$PATH git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || cat "$SCRIPT_DIR/.version" 2>/dev/null)
-    [ -n "$sha" ] && echo "$sha" | cut -c1-7 || echo "unknown"
+    sh "$SCRIPTS_DIR/update.sh" version 2>/dev/null || echo "unknown"
 }
 
 check_for_update() {
@@ -196,8 +194,8 @@ check_for_update() {
         UPDATE*) ;;
         *) return 0 ;;
     esac
-    old=$(echo "$result" | head -1 | cut -d' ' -f2 | cut -c1-7)
-    new=$(echo "$result" | head -1 | cut -d' ' -f3 | cut -c1-7)
+    old=$(echo "$result" | head -1 | cut -d' ' -f2)
+    new=$(echo "$result" | head -1 | cut -d' ' -f3)
     echo ""
     echo -e "${YELLOW}Helper script update available:${NC} $old -> $new"
     echo "$result" | tail -n +2

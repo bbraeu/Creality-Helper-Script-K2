@@ -1,8 +1,13 @@
 # Changelog
 
-## [Unreleased] - 2026-10-16 - Updatable Moonraker, Entware location, webcam URLs
+## [2.0.0] - 2026-10-16 - Updatable Moonraker, release-based updates
 
 ### Added
+- **Updates follow GitHub releases** (`vX.Y.Z`, no drafts / pre-releases),
+  not every commit: the self-update installs the newest release archive and
+  shows its release notes; `.version` holds the release tag. Git checkouts
+  (updatable Moonraker) fast-forward to the newest release tag, and
+  Moonraker lists the helper with `channel: stable` - same rule.
 - **Helper script in Moonraker's Software Updates.** With the updatable
   Moonraker, `/mnt/UDISK/helper-script` is converted in place into a git
   checkout (generated files are git-ignored) and listed as

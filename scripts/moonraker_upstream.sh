@@ -176,6 +176,8 @@ type: git_repo
 path: $SCRIPT_DIR
 origin: https://github.com/$HELPER_REPO.git
 primary_branch: main
+# Follow releases (vX.Y.Z tags), not every commit
+channel: stable
 is_system_service: False
 EOF
     else

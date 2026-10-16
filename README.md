@@ -27,9 +27,10 @@ The menu header shows what was detected, e.g. `Detected: K2 (no chamber heater, 
 
 ## Updating
 
-The helper updates itself. The commit it was installed from is stored in
+The helper updates itself from **GitHub releases** (`vMAJOR.MINOR.PATCH`, no drafts or
+pre-releases) - not from every commit. The installed release is stored in
 `/mnt/UDISK/helper-script/.version`; on every start `helper.sh` compares it with the
-latest commit on GitHub, lists what changed and offers the update (Enter = yes).
+newest release, shows its release notes and offers the update (Enter = yes).
 You can also update from the menu (Tools → 34) or non-interactively over SSH:
 
 ```sh
@@ -40,6 +41,12 @@ Only the script files are replaced. Your installed features, `go2rtc.yaml`, back
 and other generated files are kept. Set `HELPER_SKIP_UPDATE=1` to skip the check
 (e.g. without internet). Features whose generated config changed (macros, camera)
 pick up the change when you reinstall them from the menu.
+
+With the updatable Moonraker (option 1 -> 2) the helper also appears in Fluidd /
+Mainsail *Software Updates* (`channel: stable`, i.e. the same releases).
+
+Releasing a new version: tag the commit `vX.Y.Z` and publish a GitHub release for it;
+its release notes are what the update prompt shows.
 
 ## Features
 
@@ -117,7 +124,7 @@ Give the plug a fixed IP address (DHCP reservation in your router).
 Creality ships an old Moonraker without git, so Fluidd's *Software Updates* cannot work.
 Option 1 -> 2 replaces it with the current upstream Moonraker (Entware Python 3.11 in
 `/mnt/UDISK`), migrates your database and keeps Creality's Moonraker as a fallback
-(Remove menu 1 switches back). Its compiled Python packages are prebuilt by
+(Remove menu 20 -> 1 switches back). Its compiled Python packages are prebuilt by
 [a GitHub workflow](.github/workflows/moonraker-wheels.yml) and published as
 `moonraker-wheels-*` releases, so nothing needs to be compiled on the printer.
 

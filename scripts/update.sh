@@ -81,7 +81,8 @@ def update():
             tmp = dest + '.update'
             with z.open(info) as src, open(tmp, 'wb') as dst:
                 shutil.copyfileobj(src, dst)
-            if rel.endswith('.sh'):
+            # Keep the executable bit from the repository (shims, .sh scripts)
+            if rel.endswith('.sh') or (info.external_attr >> 16) & 0o111:
                 os.chmod(tmp, 0o755)
             os.replace(tmp, dest)
             count += 1

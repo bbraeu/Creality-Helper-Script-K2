@@ -31,6 +31,8 @@ INIT=/etc/init.d/moonraker
 RC_LINK=/etc/rc.d/S56moonraker
 BACKUP_DIR=$SCRIPT_DIR/backups
 INIT_MARKER="K2 helper: upstream Moonraker"
+WHEELS_DIR=/mnt/UDISK/moonraker-wheels
+HELPER_REPO=bbraeu/Creality-Helper-Script-K2-Base
 # Entware's gcc headers lack SSIZE_MAX (streaming-form-data, lmdb fail without it)
 BUILD_ENV="CFLAGS=-DSSIZE_MAX=2147483647 SKIP_CYTHON=1 TMPDIR=$MR_TMP"
 
@@ -70,13 +72,15 @@ start_service() {
 	[ "x\$(get_sn_mac.sh pcba_test)" = "x1" ] && exit 0
 	mkdir -p $MR_TMP
 	procd_open_instance
-	procd_set_param env HOME=/mnt/UDISK PATH=$SHIM_DIR:/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin $BUILD_ENV
+	procd_set_param env HOME=/mnt/UDISK PATH=$SHIM_DIR:/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin $BUILD_ENV PIP_FIND_LINKS=$WHEELS_DIR
 	procd_set_param command $MR_ENV/bin/python $MR_DIR/moonraker/moonraker.py -d $PRINTER_DATA -c $BASE_CONF -l $LOGS_DIR/moonraker.log
 	procd_set_param respawn 3600 5 0
 	procd_close_instance
 }
 EOF
     chmod +x "$INIT"
+    # Zip installs (README) do not keep the executable bit
+    chmod +x "$SHIM_DIR"/supervisorctl "$SHIM_DIR"/sudo
     # Boot used a patched copy of Creality's script; use the standard link instead
     rm -f "$RC_LINK"
     ln -s ../init.d/moonraker "$RC_LINK"
@@ -173,8 +177,8 @@ EOF
 }
 
 build_env() {
-    log_info "Installing build tools and Python from Entware..."
-    opkg_install python3 python3-pip python3-dev python3-pillow python3-sqlite3 gcc make git git-http || return 1
+    log_info "Installing Python from Entware..."
+    opkg_install python3 python3-pip python3-pillow python3-sqlite3 git git-http || return 1
     /opt/bin/pip3 install -q --no-cache-dir virtualenv || return 1
 
     if [ -d "$MR_DIR/.git" ]; then
@@ -190,18 +194,81 @@ build_env() {
         log_info "Creating Python environment..."
         /opt/bin/virtualenv -q -p /opt/bin/python3 --system-site-packages "$MR_ENV" || return 1
     fi
-
     mkdir -p "$MR_TMP"
-    log_info "Building Python packages - this takes 15-30 minutes on the K2. Do not power off."
-    env $BUILD_ENV "$MR_ENV/bin/pip" install -q --no-cache-dir -r "$MR_DIR/scripts/moonraker-requirements.txt" || return 1
 
+    # 1) Prebuilt wheels (GitHub release of this repo): no compiling on the printer
+    if fetch_wheels && install_from_wheels; then
+        log_success "Installed Moonraker's packages from the prebuilt wheels."
+        return 0
+    fi
+
+    # 2) Compile on the printer. 488 MB RAM is not enough for some builds
+    #    (the OOM killer stops them), so add a temporary swap file.
+    log_warn "No matching prebuilt wheels - compiling on the printer instead."
+    log_info "Installing build tools..."
+    opkg_install python3-dev gcc make || return 1
+    swap_on
+    log_info "Building Python packages - this takes 15-30 minutes on the K2. Do not power off."
+    env $BUILD_ENV "$MR_ENV/bin/pip" install -q --no-cache-dir -r "$MR_DIR/scripts/moonraker-requirements.txt"
+    local rc=$?
     # lmdb only reads Creality's old database once for the migration to sqlite
-    if ! "$MR_ENV/bin/python" -c "import lmdb" 2>/dev/null; then
+    if [ $rc -eq 0 ] && ! "$MR_ENV/bin/python" -c "import lmdb" 2>/dev/null; then
         log_info "Building lmdb (to migrate your existing Moonraker database)..."
         build_lmdb || log_warn "lmdb build failed - Moonraker starts with an empty database (history, UI settings)."
         rm -rf "$MR_TMP/lmdb-src"
     fi
+    swap_off
+    return $rc
+}
+
+# Download the newest "moonraker-wheels-*" release asset of this repository
+# (built by .github/workflows/moonraker-wheels.yml) into $WHEELS_DIR
+fetch_wheels() {
+    log_info "Downloading prebuilt Moonraker wheels..."
+    "$MR_ENV/bin/python" - "$HELPER_REPO" "$WHEELS_DIR" << 'PYEOF'
+import io, json, os, shutil, sys, tarfile, urllib.request
+repo, dest = sys.argv[1:3]
+req = urllib.request.Request('https://api.github.com/repos/%s/releases?per_page=30' % repo,
+                             headers={'User-Agent': 'k2-helper-script'})
+releases = [r for r in json.load(urllib.request.urlopen(req, timeout=20))
+            if r['tag_name'].startswith('moonraker-wheels-') and not r['draft']]
+releases.sort(key=lambda r: r['created_at'], reverse=True)
+for rel in releases:
+    for asset in rel['assets']:
+        if asset['name'] == 'moonraker-wheels-k2.tar.gz':
+            data = urllib.request.urlopen(asset['browser_download_url'], timeout=120).read()
+            shutil.rmtree(dest, ignore_errors=True)
+            with tarfile.open(fileobj=io.BytesIO(data)) as t:
+                t.extractall(os.path.dirname(dest))
+            os.rename(os.path.join(os.path.dirname(dest), 'wheels'), dest)
+            print('  %s' % rel['tag_name'])
+            sys.exit(0)
+sys.exit(1)
+PYEOF
+}
+
+install_from_wheels() {
+    # --only-binary: fail instead of compiling when Moonraker needs a newer
+    # package than the bundle has (then the caller compiles)
+    "$MR_ENV/bin/pip" install -q --no-cache-dir --only-binary=:all: --find-links "$WHEELS_DIR" \
+        -r "$MR_DIR/scripts/moonraker-requirements.txt" || return 1
+    "$MR_ENV/bin/python" -c "import lmdb" 2>/dev/null || \
+        "$MR_ENV/bin/pip" install -q --no-index --find-links "$WHEELS_DIR" lmdb || \
+        log_warn "No lmdb wheel - Moonraker starts with an empty database (history, UI settings)."
     return 0
+}
+
+# Temporary swap file for on-printer builds (removed again afterwards)
+SWAPFILE=/mnt/UDISK/moonraker-build.swap
+swap_on() {
+    grep -q "$SWAPFILE" /proc/swaps 2>/dev/null && return 0
+    log_info "Adding a temporary 512 MB swap file for the build..."
+    dd if=/dev/zero of="$SWAPFILE" bs=1M count=512 2> /dev/null && chmod 600 "$SWAPFILE" &&
+        mkswap "$SWAPFILE" > /dev/null && swapon "$SWAPFILE" || log_warn "Could not enable swap - the build may run out of memory."
+}
+swap_off() {
+    swapoff "$SWAPFILE" 2>/dev/null
+    rm -f "$SWAPFILE"
 }
 
 # pip cannot build lmdb here (its build applies a patch that fails);
@@ -254,7 +321,8 @@ install_upstream() {
     echo "  (Moonraker, Fluidd, Mainsail, Mobileraker Companion)."
     echo ""
     echo "  - needs Entware and about 600 MB on /mnt/UDISK"
-    echo "  - building takes 15-30 minutes; do not power off"
+    echo "  - a few minutes with the prebuilt packages, 15-30 minutes if"
+    echo "    they have to be compiled on the printer; do not power off"
     echo "  - your Moonraker database (history, UI settings, webcams) is"
     echo "    migrated; Creality's Moonraker stays installed as a fallback"
     echo "  - Klipper and Creality's own apps are not touched"
@@ -333,7 +401,7 @@ remove_upstream() {
     printf "Also delete %s and %s (about 400 MB)? [y/n]: " "$MR_DIR" "$MR_ENV"
     read confirm
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-        rm -rf "$MR_DIR" "$MR_ENV"
+        rm -rf "$MR_DIR" "$MR_ENV" "$WHEELS_DIR"
         log_success "Deleted."
     fi
 }

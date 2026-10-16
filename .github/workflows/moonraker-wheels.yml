@@ -1,0 +1,53 @@
+name: Moonraker wheels (K2)
+
+# Prebuilds Moonraker's Python dependencies for the K2 (Entware Python 3.11,
+# armv7 soft-float) and publishes them as a release asset. The helper's
+# updatable-Moonraker installer downloads them, so nothing is compiled on the
+# printer (488 MB RAM: on-printer builds get killed by the OOM killer).
+
+on:
+  workflow_dispatch:
+    inputs:
+      moonraker_ref:
+        description: Moonraker git ref (branch, tag or commit)
+        default: master
+  schedule:
+    # Monthly, to follow Moonraker's requirement updates
+    - cron: "0 3 1 * *"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Build wheels in an ARMv7 container
+        run: |
+          mkdir -p out
+          docker run --rm --platform linux/arm/v7 \
+            -v "$PWD:/work" \
+            arm32v7/debian:bookworm-slim \
+            /bin/sh /work/files/moonraker/build-wheels.sh /work/out "${{ inputs.moonraker_ref || 'master' }}"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit=$(sed -n 's/^moonraker_commit=//p' out/wheels/BUILD_INFO)
+          tag="moonraker-wheels-${commit:0:7}"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" out/moonraker-wheels-k2.tar.gz --clobber
+          else
+            gh release create "$tag" out/moonraker-wheels-k2.tar.gz \
+              --title "Moonraker wheels for K2 (${commit:0:7})" \
+              --notes "Prebuilt Python wheels for Moonraker ${commit} on the Creality K2 (Entware Python 3.11, linux_armv7l). Used by the helper's updatable Moonraker installer." \
+              --latest=false
+          fi

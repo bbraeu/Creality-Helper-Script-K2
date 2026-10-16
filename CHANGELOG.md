@@ -1,5 +1,33 @@
 # Changelog
 
+## [Unreleased] - 2026-10-16 - Updatable Moonraker, Entware location, webcam URLs
+
+### Added
+- **Updatable Moonraker** (Install menu 1 -> 2, `scripts/moonraker_upstream.sh`).
+  Creality's Moonraker (Python 3.9, no git) cannot run the update manager;
+  this installs current upstream Moonraker in `/mnt/UDISK/moonraker` with an
+  Entware Python 3.11 virtualenv, migrates the existing database (lmdb ->
+  sqlite, the old one is kept), generates `moonraker_upstream.conf` (includes
+  `moonraker.conf`, update_manager entries for Fluidd / Mainsail / Mobileraker)
+  and swaps the procd service (Creality's backed up). `supervisorctl` / `sudo`
+  shims map service restarts and reboot/shutdown to OpenWrt. Falls back to
+  Creality's Moonraker automatically if the new one does not start; Remove
+  menu 1 switches back; re-applied at boot after firmware updates.
+- **Prebuilt Moonraker wheels**: `.github/workflows/moonraker-wheels.yml`
+  builds the compiled dependencies in an ARMv7 container with the K2's Entware
+  toolchain and publishes them as a `moonraker-wheels-<commit>` release. The
+  installer uses them; on-printer builds (with a temporary swap file) are only
+  the fallback - without swap they were killed by the OOM killer.
+- **mjpg-streamer style webcam URLs** `/webcam/?action=stream|snapshot` on
+  ports 4408 / 4409 (Mobileraker / Moonraker defaults) served by go2rtc.
+
+### Fixed
+- **Entware filled the 240 MB system partition** (Python + ffmpeg ~150 MB),
+  which breaks writes to `/etc`, nginx and opkg (its package list got
+  truncated). Entware now lives in `/mnt/UDISK/opt` (`/opt` is a symlink);
+  existing installs are offered a move at helper start, and opkg's status file
+  is rebuilt when truncated.
+
 ## [1.0.0] - 2026-10-16 - Auto Power Off
 
 ### Added

@@ -45,7 +45,7 @@ pick up the change when you reinstall them from the menu.
 
 | Option | Feature |
 |--------|---------|
-| 1 | Moonraker Extensions (persistent moonraker.conf, object processing) |
+| 1 | Moonraker: extensions for Creality's Moonraker, or an **updatable upstream Moonraker** (Software Updates in Fluidd/Mainsail) |
 | 2 | Fans Control Macros |
 | 3 | Useful Macros (PID, bed leveling, warmup, chamber status) |
 | 4 | Save Z-Offset Macros |
@@ -111,6 +111,15 @@ cancels it; a cancelled print does not power off.
 Macros: `ACTIVATE_POWER_OFF` (power off after this print), `DEACTIVATE_POWER_OFF`,
 `AUTO_POWER_OFF ENABLE=1|0` (every print; the installer sets the default).
 Give the plug a fixed IP address (DHCP reservation in your router).
+
+## Updatable Moonraker
+
+Creality ships an old Moonraker without git, so Fluidd's *Software Updates* cannot work.
+Option 1 -> 2 replaces it with the current upstream Moonraker (Entware Python 3.11 in
+`/mnt/UDISK`), migrates your database and keeps Creality's Moonraker as a fallback
+(Remove menu 1 switches back). Its compiled Python packages are prebuilt by
+[a GitHub workflow](.github/workflows/moonraker-wheels.yml) and published as
+`moonraker-wheels-*` releases, so nothing needs to be compiled on the printer.
 
 ## Requirements
 

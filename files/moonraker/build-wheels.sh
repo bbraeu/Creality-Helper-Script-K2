@@ -40,7 +40,9 @@ grep -v -i '^pillow' /tmp/moonraker/scripts/moonraker-requirements.txt \
 python3 -m pip wheel -q -w "$WHEELS" -r /tmp/requirements.txt
 
 echo "### lmdb (database migration)"
-# pip cannot build it: its setup applies a patch that fails; LMDB_PURE skips it
+# pip cannot build it: its setup applies a patch that fails; LMDB_PURE skips it.
+# setup.py needs setuptools / wheel (a virtualenv has them, plain Entware not)
+python3 -m pip install -q setuptools wheel
 mkdir -p /tmp/lmdb && cd /tmp/lmdb
 python3 - << 'PYEOF'
 import json, tarfile, urllib.request

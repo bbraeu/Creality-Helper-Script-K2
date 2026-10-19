@@ -25,7 +25,7 @@ install_moonraker_extensions() {
         cat > "$MOONRAKER_CONF" << 'EOF'
 # Creality K2 - Moonraker extension config
 # Managed by Creality Helper Script
-# https://github.com/bbraeu/Creality-Helper-Script-K2-Base
+# https://github.com/bbraeu/Creality-Helper-Script-K2
 #
 # This file loads the stock read-only Moonraker config first,
 # then extensions added by the helper script appear below.

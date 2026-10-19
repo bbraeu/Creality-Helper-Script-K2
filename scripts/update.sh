@@ -21,7 +21,7 @@
 # final release tag.
 SCRIPT_DIR=/mnt/UDISK/helper-script
 VERSION_FILE=$SCRIPT_DIR/.version
-REPO=bbraeu/Creality-Helper-Script-K2-Base
+REPO=bbraeu/Creality-Helper-Script-K2
 BRANCH=main
 export PATH=/opt/bin:/opt/sbin:$PATH
 
@@ -162,6 +162,15 @@ is_git_install() {
     [ -d "$SCRIPT_DIR/.git" ] && command -v git > /dev/null
 }
 
+# Repository renamed (Creality-Helper-Script-K2-Base -> ...-K2): point older
+# checkouts at the new URL, otherwise Moonraker sees an origin that does not
+# match [update_manager helper-script] and reports the repo as invalid.
+sync_origin() {
+    local url="https://github.com/$REPO.git"
+    [ "$(git -C "$SCRIPT_DIR" remote get-url origin 2> /dev/null)" = "$url" ] ||
+        git -C "$SCRIPT_DIR" remote set-url origin "$url"
+}
+
 git_latest_tag() {
     git -C "$SCRIPT_DIR" tag --merged "origin/$BRANCH" -l 'v*' | pyrun max_tag
 }
@@ -173,6 +182,7 @@ git_version() {
 
 git_check() {
     local tag
+    sync_origin
     git -C "$SCRIPT_DIR" fetch -q --tags origin "$BRANCH" 2> /dev/null || { echo "OFFLINE"; return 0; }
     tag=$(git_latest_tag)
     if [ -z "$tag" ] || git -C "$SCRIPT_DIR" merge-base --is-ancestor "$tag" HEAD; then
@@ -186,6 +196,7 @@ git_check() {
 git_update() {
     local tag
     cd "$SCRIPT_DIR" || return 1
+    sync_origin
     git fetch -q --tags origin "$BRANCH" || return 1
     tag=$(git_latest_tag)
     [ -n "$tag" ] || { echo "No release found"; return 1; }
@@ -204,7 +215,10 @@ git_update() {
 # checkout is placed on the newest release, like Moonraker's stable channel.
 convert_to_git() {
     local tag
-    [ -d "$SCRIPT_DIR/.git" ] && return 0
+    if [ -d "$SCRIPT_DIR/.git" ]; then
+        sync_origin
+        return 0
+    fi
     command -v git > /dev/null || { echo "git not found (install Entware)"; return 1; }
     cd "$SCRIPT_DIR" || return 1
     if git init -q -b "$BRANCH" &&

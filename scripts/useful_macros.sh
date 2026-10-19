@@ -31,7 +31,7 @@ install_useful_macros() {
     cat > "$MACROS_CFG" << CFGEOF
 # Useful Macros - $(printer_summary)
 # Managed by Creality Helper Script (generated from the detected printer.cfg)
-# https://github.com/bbraeu/Creality-Helper-Script-K2-Base
+# https://github.com/bbraeu/Creality-Helper-Script-K2
 #
 # NOTE: START_PRINT, END_PRINT, PAUSE, RESUME, CANCEL_PRINT are NOT included
 # here. They are already defined in stock gcode_macro.cfg with full CFS

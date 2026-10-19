@@ -11,7 +11,12 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 
 FLUIDD_DIR=/usr/share/fluidd
-FLUIDD_URL=https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip
+FLUIDD_LATEST_URL=https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip
+# Newest Fluidd that can still edit config files with Creality's stock
+# Moonraker - from 1.37 on the file editor fails against it. The updatable
+# Moonraker (Install menu 1 -> 2) works with the latest Fluidd.
+FLUIDD_STOCK_MOONRAKER_VERSION=v1.36.4
+FLUIDD_STOCK_MOONRAKER_URL=https://github.com/fluidd-core/fluidd/releases/download/$FLUIDD_STOCK_MOONRAKER_VERSION/fluidd.zip
 NGINX_CONF=/etc/nginx/nginx.conf
 
 # Stock nginx server block for Fluidd — matches what ships on the K2
@@ -122,8 +127,13 @@ install_fluidd() {
     if [ -d "$FLUIDD_DIR" ] && [ -f "$FLUIDD_DIR/index.html" ]; then
         echo -e "${YELLOW}Fluidd is already installed at $FLUIDD_DIR.${NC}"
         echo ""
-        echo "  1) Update to the latest version"
-        echo "  2) Repair (re-download and reinstall current latest)"
+        if moonraker_is_upstream; then
+            echo "  1) Update to the latest version"
+            echo "  2) Repair (re-download and reinstall the latest version)"
+        else
+            echo "  1) Install $FLUIDD_STOCK_MOONRAKER_VERSION (fixes the config editor with Creality's Moonraker)"
+            echo "  2) Repair (re-download and reinstall $FLUIDD_STOCK_MOONRAKER_VERSION)"
+        fi
         echo "  3) Restore nginx block only (if port 4408 is broken)"
         echo "  0) Cancel"
         echo ""
@@ -147,7 +157,14 @@ install_fluidd() {
         log_info "Current version: $CURRENT_VER"
     fi
 
-    log_info "Downloading latest Fluidd..."
+    if moonraker_is_upstream; then
+        FLUIDD_URL=$FLUIDD_LATEST_URL
+        log_info "Downloading latest Fluidd..."
+    else
+        FLUIDD_URL=$FLUIDD_STOCK_MOONRAKER_URL
+        log_info "Downloading Fluidd $FLUIDD_STOCK_MOONRAKER_VERSION (newest version that can edit config files with Creality's Moonraker)..."
+        log_info "For the latest Fluidd install the updatable Moonraker first (Install menu 1 -> 2)."
+    fi
     download_file "$FLUIDD_URL" /tmp/fluidd.zip
 
     if [ ! -f /tmp/fluidd.zip ] || [ ! -s /tmp/fluidd.zip ]; then

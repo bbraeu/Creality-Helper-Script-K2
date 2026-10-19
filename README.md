@@ -1,24 +1,24 @@
 # Creality K2 - Helper Script
 
-A menu-driven helper script for the **Creality K2** (base model, 260 × 260 mm) and **K2 Combo (with CFS)**.
-It also works on the K2 Pro and K2 Plus: the script reads the hardware from your stock `printer.cfg`
-(bed size, chamber heater, chamber fan / sensor, fans, Z-tilt) instead of assuming one model.
+A menu-driven helper script for the **Creality K2 series**: K2 / K2 Combo (with CFS), K2 Pro and K2 Plus.
+The script reads the hardware from your stock `printer.cfg` (bed size, chamber heater, chamber fan / sensor,
+fans, Z-tilt) instead of assuming one model.
 
 Forked from [sw3defy's K2 Plus Helper Script](https://github.com/sw3defy/Creality-Helper-Script-K2-Plus), which is based on the excellent [Guilouz Creality Helper Script](https://github.com/Guilouz/Creality-Helper-Script).
 
 ## Wiki & Documentation
 
-**[https://bbraeu.github.io/Creality-Helper-Script-Wiki-K2-Base/](https://bbraeu.github.io/Creality-Helper-Script-Wiki-K2-Base/)**
+**[https://bbraeu.github.io/Creality-Helper-Script-Wiki-K2/](https://bbraeu.github.io/Creality-Helper-Script-Wiki-K2/)**
 
 ## Installation
 
 Connect to your K2 via SSH (user `root`, password `creality_2024`), then run:
 
 ```sh
-python3 -c "import urllib.request; urllib.request.urlretrieve('https://github.com/bbraeu/Creality-Helper-Script-K2-Base/archive/refs/heads/main.zip', '/tmp/helper.zip')"
+python3 -c "import urllib.request; urllib.request.urlretrieve('https://github.com/bbraeu/Creality-Helper-Script-K2/archive/refs/heads/main.zip', '/tmp/helper.zip')"
 python3 -c "import shutil; shutil.unpack_archive('/tmp/helper.zip', '/tmp/')"
 mkdir -p /mnt/UDISK/helper-script
-cp -r /tmp/Creality-Helper-Script-K2-Base-main/* /mnt/UDISK/helper-script/
+cp -r /tmp/Creality-Helper-Script-K2-main/* /mnt/UDISK/helper-script/
 chmod +x /mnt/UDISK/helper-script/helper.sh
 sh /mnt/UDISK/helper-script/helper.sh
 ```
@@ -59,7 +59,7 @@ its release notes are what the update prompt shows.
 | 5 | M600 Filament Change Support |
 | 6 | KAMP-K2 (Klipper Adaptive Meshing & Purging, K2 port) |
 | 7 | Improved Shapers Calibrations |
-| 8 | Fluidd (install/update/repair - port 4408) |
+| 8 | Fluidd (install/update/repair - port 4408). With Creality's Moonraker it installs v1.36.4, the newest version whose config editor works there |
 | 9 | Mainsail (install/update/repair - port 4409) |
 | 10 | Moonraker Timelapse |
 | 11 | Camera Support for Fluidd, Mainsail and Mobileraker (WebRTC + optional MJPEG via go2rtc; live MJPEG needs Entware ffmpeg 5) |
@@ -73,6 +73,7 @@ its release notes are what the update prompt shows.
 | 19 | Auto Power Off - switch the printer off with a smart plug after the print has cooled down (Kasa with network search, Tasmota, Shelly, Home Assistant) |
 | 21-24 | Backup / restore Klipper configuration and Moonraker database |
 | 25-34 | Tools: restarts, logs, Entware update, clear logs & cache, system information, update helper script |
+| 35 | Stock config fixes: switch the optional fixes for Creality's config files on/off, restore `motor_control.cfg` from stock |
 
 ## K2 (base) differences
 

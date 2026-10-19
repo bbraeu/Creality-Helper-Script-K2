@@ -2,6 +2,7 @@
 # repository (the helper directory can be a git checkout updated by Moonraker)
 .installed
 .version
+.stock_config_fixes
 .git-credentials
 backups/
 go2rtc

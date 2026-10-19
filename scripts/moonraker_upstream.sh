@@ -32,7 +32,7 @@ RC_LINK=/etc/rc.d/S56moonraker
 BACKUP_DIR=$SCRIPT_DIR/backups
 INIT_MARKER="K2 helper: upstream Moonraker"
 WHEELS_DIR=/mnt/UDISK/moonraker-wheels
-HELPER_REPO=bbraeu/Creality-Helper-Script-K2-Base
+HELPER_REPO=bbraeu/Creality-Helper-Script-K2
 # Entware's gcc headers lack SSIZE_MAX (streaming-form-data, lmdb fail without it)
 BUILD_ENV="CFLAGS=-DSSIZE_MAX=2147483647 SKIP_CYTHON=1 TMPDIR=$MR_TMP"
 
@@ -412,6 +412,9 @@ remove_upstream() {
         log_success "Creality's Moonraker is active again."
     else
         log_error "Moonraker did not answer yet - check $LOGS_DIR/moonraker.log"
+    fi
+    if [ -f /usr/share/fluidd/index.html ]; then
+        log_info "Fluidd 1.37+ cannot edit config files with Creality's Moonraker - if needed, reinstall Fluidd (Install menu 8) to get a compatible version."
     fi
     printf "Also delete %s and %s (about 400 MB)? [y/n]: " "$MR_DIR" "$MR_ENV"
     read confirm

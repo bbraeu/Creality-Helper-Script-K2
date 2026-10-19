@@ -1,6 +1,6 @@
 #!/bin/sh
 # Creality K2 Helper Script (K2 / K2 Pro / K2 Plus - hardware is detected at runtime)
-# https://bbraeu.github.io/Creality-Helper-Script-Wiki-K2-Base
+# https://bbraeu.github.io/Creality-Helper-Script-Wiki-K2
 
 SCRIPT_DIR=/mnt/UDISK/helper-script
 SCRIPTS_DIR=$SCRIPT_DIR/scripts
@@ -23,7 +23,7 @@ print_header() {
     echo -e "${WHITE}======================================================${NC}"
     echo -e "${WHITE}   Creality K2 Helper Script${NC}"
     echo -e "${WHITE}======================================================${NC}"
-    echo -e "${YELLOW}   https://bbraeu.github.io/Creality-Helper-Script-Wiki-K2-Base${NC}"
+    echo -e "${YELLOW}   https://bbraeu.github.io/Creality-Helper-Script-Wiki-K2${NC}"
     echo -e "${WHITE}======================================================${NC}"
     echo -e "   Detected: ${CYAN}$(printer_summary)${NC}"
     echo ""
@@ -97,6 +97,7 @@ main_menu() {
     echo -e "   ${YELLOW}32)${NC} ${GREEN}Clear logs & cache${NC}"
     echo -e "   ${YELLOW}33)${NC} ${GREEN}System information${NC}"
     echo -e "   ${YELLOW}34)${NC} ${GREEN}Update helper script${NC}               ${WHITE}[installed: $(installed_version)]${NC}"
+    echo -e "   ${YELLOW}35)${NC} ${GREEN}Stock config fixes${NC}                 ${WHITE}[$(stock_fixes_state)]${NC}"
     echo ""
     echo -e "    ${YELLOW}0)${NC} ${RED}Exit${NC}"
     echo ""
@@ -148,6 +149,7 @@ handle_choice() {
         32) sh "$SCRIPTS_DIR/system.sh" clear_logs_cache ;;
         33) sh "$SCRIPTS_DIR/system.sh" system_info ;;
         34) run_update ;;
+        35) sh "$SCRIPTS_DIR/system.sh" stock_fixes_menu ;;
         0)  echo ""; echo "Goodbye!"; echo ""; exit 0 ;;
         *)  echo -e "${RED}Invalid choice.${NC}"; sleep 1 ;;
     esac
@@ -291,6 +293,7 @@ check_printer
 check_for_update
 check_entware_location
 detect_printer
+stock_fixes_prompt
 patch_stock_configs
 ensure_addons
 install_rc_local_patch

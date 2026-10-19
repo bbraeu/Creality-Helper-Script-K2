@@ -614,33 +614,62 @@ restore_nginx_conf() {
     fi
 }
 
-# ── Stock config patch (fix underscore prefix bug) ────────────────────────────
+# ── Stock config fixes (opt-in) ───────────────────────────────────────────────
+# Optional fixes for Creality's stock config files: macros with a leading
+# underscore in box.cfg / gcode_macro.cfg (CFS load/unload failures, "Unknown
+# command: WAIT_TEMP_START" on some firmware versions), START_PRINT using
+# params.BED_TEMP / params.EXTRUDER_TEMP without defaults, and mesh_min 5,5 in
+# printer.cfg. They change the user's config files, so they only run after the
+# user agreed (stock_fixes_prompt); the answer is kept in $STOCK_FIXES_FILE.
+# A file is only written when a fix actually changes it, and it is backed up
+# first. motor_control.cfg is never replaced automatically (restore_motor_cfg).
 
-patch_stock_configs() {
-    # Ensure /usr/bin/wget exists. Moonraker's shell_command subprocess
-    # PATH does not include /opt/bin (where wget actually lives on this
-    # firmware), causing "FileNotFoundError: wget" for every timelapse
-    # frame capture (TIMELAPSE_TAKE_FRAME -> [timelapse] component ->
-    # wget against the go2rtc frame.jpeg endpoint). /usr/bin is on every
-    # process's default PATH, so a symlink there fixes it without
-    # touching Moonraker's service config.
-    if [ -x /opt/bin/wget ] && [ ! -e /usr/bin/wget ]; then
-        ln -sf /opt/bin/wget /usr/bin/wget
-        log_success "Linked /usr/bin/wget -> /opt/bin/wget (fixes timelapse frame capture)"
+STOCK_FIXES_FILE=$SCRIPT_DIR/.stock_config_fixes
+
+# on / off / empty (not asked yet)
+stock_fixes_state() {
+    cat "$STOCK_FIXES_FILE" 2>/dev/null
+}
+
+stock_fixes_enabled() {
+    [ "$(stock_fixes_state)" = "on" ]
+}
+
+set_stock_fixes() {
+    echo "$1" > "$STOCK_FIXES_FILE"
+}
+
+same_file() {
+    diff -q "$1" "$2" > /dev/null 2>&1
+}
+
+# Run sed over a config file and replace it only if that changes something;
+# the original is kept as <file>.helper-<date>.bak.
+# patch_cfg_file <file> <sed arguments...>
+patch_cfg_file() {
+    local file="$1" tmp bak
+    shift
+    [ -f "$file" ] || return 0
+    tmp="${file}.helper-tmp"
+    if ! sed "$@" "$file" > "$tmp" 2>/dev/null; then
+        rm -f "$tmp"
+        log_warn "Could not patch $(basename "$file")"
+        return 0
     fi
-
-    local box_cfg="$CONFIG_DIR/box.cfg"
-    local macro_cfg="$CONFIG_DIR/gcode_macro.cfg"
-
-    log_info "Patching stock config files to fix macro naming..."
-
-    if [ -f "$box_cfg" ]; then
-        sed -i 's/\[gcode_macro _BOX_/[gcode_macro BOX_/g' "$box_cfg"
-        log_success "Patched box.cfg"
+    if same_file "$file" "$tmp"; then
+        rm -f "$tmp"
+        return 0
     fi
+    bak="${file}.helper-$(date +%Y%m%d-%H%M%S).bak"
+    cp -p "$file" "$bak"
+    cat "$tmp" > "$file"   # keeps owner and permissions of the original
+    rm -f "$tmp"
+    log_success "Patched $(basename "$file") (original saved as $(basename "$bak"))"
+}
 
-    if [ -f "$macro_cfg" ]; then
-        sed -i \
+apply_stock_fixes() {
+    patch_cfg_file "$CONFIG_DIR/box.cfg" -e 's/\[gcode_macro _BOX_/[gcode_macro BOX_/g'
+    patch_cfg_file "$CONFIG_DIR/gcode_macro.cfg" \
           -e 's/\[gcode_macro _PRINTER_PARAM\]/[gcode_macro PRINTER_PARAM]/g' \
           -e "s/gcode_macro _PRINTER_PARAM'/gcode_macro PRINTER_PARAM'/g" \
           -e 's/printer\["gcode_macro _PRINTER_PARAM"\]/printer["gcode_macro PRINTER_PARAM"]/g' \
@@ -701,41 +730,122 @@ patch_stock_configs() {
           -e 's/M140 S{params\.BED_TEMP}/M140 S{BED_TEMP}/g' \
           -e 's/M104 S{params\.EXTRUDER_TEMP}/M104 S{EXTRUDER_TEMP}/g' \
           -e 's/M190 S{params\.BED_TEMP}/M190 S{BED_TEMP}/g' \
-          -e 's/M109 S{params\.EXTRUDER_TEMP}/M109 S{EXTRUDER_TEMP}/g' \
-          "$macro_cfg"
-        log_success "Patched gcode_macro.cfg"
+          -e 's/M109 S{params\.EXTRUDER_TEMP}/M109 S{EXTRUDER_TEMP}/g'
+    patch_cfg_file "$CONFIG_DIR/printer.cfg" -e 's/mesh_min: 5,5/mesh_min: 20,20/'
+}
+
+# Ask once whether the stock config fixes may be applied (helper.sh start).
+stock_fixes_prompt() {
+    local answer
+    [ -n "$(stock_fixes_state)" ] && return 0
+    echo ""
+    echo -e "${YELLOW}Optional fixes for Creality's stock config files${NC}"
+    echo "  The helper can patch box.cfg, gcode_macro.cfg and printer.cfg:"
+    echo "   - rename macros with a leading underscore (_BOX_..., _WAIT_TEMP_START, ...)"
+    echo "     - only needed if you see CFS load/unload failures or errors like"
+    echo "       'Unknown command: WAIT_TEMP_START'"
+    echo "   - START_PRINT: use BED_TEMP / EXTRUDER_TEMP with defaults"
+    echo "   - [bed_mesh] mesh_min 5,5 -> 20,20 (spikes at the bed edge)"
+    echo "  Each changed file is backed up first (<file>.helper-<date>.bak). Once"
+    echo "  enabled, the fixes are re-applied at boot (firmware updates restore the"
+    echo "  stock files). You can change this later in the menu (Stock config fixes)."
+    echo ""
+    printf "Apply these fixes? [y/N]: "
+    read answer
+    case "$answer" in
+        y|Y) set_stock_fixes on ;;
+        *)   set_stock_fixes off; log_info "Stock config files are left unchanged." ;;
+    esac
+}
+
+# Called at helper.sh start and from rc.local at boot. Changes configs only
+# when the user enabled the fixes; motor_control.cfg is only reported.
+patch_stock_configs() {
+    # Ensure /usr/bin/wget exists. Moonraker's shell_command subprocess
+    # PATH does not include /opt/bin (where wget actually lives on this
+    # firmware), causing "FileNotFoundError: wget" for every timelapse
+    # frame capture (TIMELAPSE_TAKE_FRAME -> [timelapse] component ->
+    # wget against the go2rtc frame.jpeg endpoint). /usr/bin is on every
+    # process's default PATH, so a symlink there fixes it without
+    # touching Moonraker's service config.
+    if [ -x /opt/bin/wget ] && [ ! -e /usr/bin/wget ]; then
+        ln -sf /opt/bin/wget /usr/bin/wget
+        log_success "Linked /usr/bin/wget -> /opt/bin/wget (fixes timelapse frame capture)"
     fi
 
-    local printer_cfg="$CONFIG_DIR/printer.cfg"
-    if [ -f "$printer_cfg" ]; then
-        sed -i 's/mesh_min: 5,5/mesh_min: 20,20/' "$printer_cfg"
-        log_success "Patched printer.cfg mesh_min"
-    fi
+    stock_fixes_enabled && apply_stock_fixes
 
-    # Restore motor_control.cfg from stock if it has been truncated/modified.
-    # A stripped-down motor_control.cfg (missing the PID/protection/LESO
-    # tuning block, e.g. x_protection_param_prt_track_max_err) makes the
-    # closed-loop X stepper far more sensitive to position-tracking errors,
-    # causing key789 stalls during the CFS cut-position move (CR_BOX_CUT).
-    # The stock file is taken from this model's directory in /rom (see
-    # stock_config_dir), so K2 / K2 Pro / K2 Plus each get their own tuning.
-    local motor_cfg="$CONFIG_DIR/motor_control.cfg"
+    [ "$1" = "boot" ] && return 0
+    if motor_cfg_modified; then
+        log_warn "motor_control.cfg differs from the stock file for this printer."
+        log_warn "If X/Y stalls (key789) happen during CFS cuts, restore it: Tools -> Stock config fixes."
+    fi
+}
+
+# 0 if motor_control.cfg differs from this model's stock copy in /rom
+motor_cfg_modified() {
     local stock_dir
     stock_dir=$(stock_config_dir)
+    [ -n "$stock_dir" ] && [ -f "$CONFIG_DIR/motor_control.cfg" ] && [ -f "$stock_dir/motor_control.cfg" ] &&
+        ! same_file "$stock_dir/motor_control.cfg" "$CONFIG_DIR/motor_control.cfg"
+}
+
+# Replace motor_control.cfg with this model's stock copy (asks first).
+# A stripped-down motor_control.cfg (missing the PID/protection/LESO tuning
+# block, e.g. x_protection_param_prt_track_max_err) makes the closed-loop X
+# stepper far more sensitive to position-tracking errors, causing key789 stalls
+# during the CFS cut-position move (CR_BOX_CUT). The stock file is taken from
+# this model's directory in /rom (see stock_config_dir), so K2 / K2 Pro /
+# K2 Plus each get their own tuning.
+restore_motor_cfg() {
+    local motor_cfg="$CONFIG_DIR/motor_control.cfg" stock_dir bak answer
+    stock_dir=$(stock_config_dir)
     if [ -z "$stock_dir" ]; then
-        log_info "Stock config dir for this model not found in /rom, skipping motor_control.cfg check."
+        log_warn "Stock config dir for this model not found in /rom - cannot restore motor_control.cfg."
+        return 1
+    fi
+    if ! motor_cfg_modified; then
+        log_info "motor_control.cfg already matches stock ($(basename "$stock_dir"))."
         return 0
     fi
-    local stock_motor_cfg="$stock_dir/motor_control.cfg"
-    if [ -f "$motor_cfg" ] && [ -f "$stock_motor_cfg" ]; then
-        if ! diff -q "$stock_motor_cfg" "$motor_cfg" > /dev/null 2>&1; then
-            cp "$motor_cfg" "${motor_cfg}.before_patch" 2>/dev/null
-            cp "$stock_motor_cfg" "$motor_cfg"
-            log_success "Restored motor_control.cfg from stock (was truncated/modified - this caused X-axis tracking errors during CFS cuts)"
-        else
-            log_info "motor_control.cfg already matches stock."
-        fi
-    fi
+    echo "Differences (stock -> yours):"
+    diff "$stock_dir/motor_control.cfg" "$motor_cfg" | head -20
+    echo ""
+    printf "Replace motor_control.cfg with the stock file from $(basename "$stock_dir")? [y/N]: "
+    read answer
+    case "$answer" in
+        y|Y) ;;
+        *) log_info "motor_control.cfg left unchanged."; return 0 ;;
+    esac
+    bak="${motor_cfg}.helper-$(date +%Y%m%d-%H%M%S).bak"
+    cp -p "$motor_cfg" "$bak"
+    cat "$stock_dir/motor_control.cfg" > "$motor_cfg"
+    log_success "Restored motor_control.cfg from stock (yours saved as $(basename "$bak")) - restart Klipper to load it."
+}
+
+# Tools menu: switch the stock config fixes on/off, restore motor_control.cfg
+stock_fixes_menu() {
+    local state choice
+    state=$(stock_fixes_state)
+    echo ""
+    echo -e "  Stock config fixes: ${YELLOW}${state:-not set}${NC}"
+    echo ""
+    echo "    1) Enable  (apply now and after every boot)"
+    echo "    2) Disable (stop changing config files)"
+    echo "    3) Restore motor_control.cfg from stock"
+    echo "    4) List backups made by the helper"
+    echo "    0) Back"
+    echo ""
+    printf "  Enter choice: "
+    read choice
+    case "$choice" in
+        1) set_stock_fixes on; apply_stock_fixes
+           log_info "Restart Klipper to load changed files." ;;
+        2) set_stock_fixes off
+           log_info "Disabled. Files already patched keep their changes; the originals are the .helper-*.bak files next to them." ;;
+        3) restore_motor_cfg ;;
+        4) ls -l "$CONFIG_DIR"/*.helper-*.bak 2>/dev/null || log_info "No backups found." ;;
+    esac
 }
 
 # Add-ons that live partly outside /mnt/UDISK: KAMP-K2 (restore_bed_mesh.py in
@@ -847,6 +957,7 @@ $include_line
     fi
     if grep -q "^\[update_manager" "$udisk_conf" "$real_conf" 2>/dev/null; then
         log_warn "An [update_manager] section is configured, but Moonraker's update manager cannot run on the K2's stock Moonraker - remove it to clear the 'failed plugins' warning."
+        log_warn "For working Software Updates install the updatable Moonraker (Install menu 1 -> 2)."
     fi
 }
 
@@ -860,7 +971,8 @@ case "$1" in
     update_entware)    update_entware ;;
     clear_logs_cache)  clear_logs_cache ;;
     system_info)       system_info ;;
-    patch_stock_configs) patch_stock_configs; ensure_addons "$2" ;;
+    patch_stock_configs) patch_stock_configs "$2"; ensure_addons "$2" ;;
+    stock_fixes_menu)  stock_fixes_menu ;;
     install_rc_local_patch) install_rc_local_patch ;;
     install_moonraker_include) install_moonraker_include ;;
 esac

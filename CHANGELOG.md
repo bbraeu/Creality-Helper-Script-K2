@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.1.0] - 2026-10-19 - Fix for Software Updates after restart, opt-in stock config fixes, rename to K2
 
 ### Changed
 - **Repository renamed to `Creality-Helper-Script-K2`** (wiki:

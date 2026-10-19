@@ -520,11 +520,25 @@ stock_config_dir() {
 
 MOONRAKER_CONF=$CONFIG_DIR/moonraker.conf
 MOONRAKER_RC=/etc/rc.d/S56moonraker
-MOONRAKER_RC_BAK=/mnt/UDISK/helper-script/.S56moonraker.orig
+MOONRAKER_RC_BAK=/mnt/UDISK/helper-script/backups/S56moonraker.orig
 MOONRAKER_STOCK_CONF=/usr/share/moonraker/moonraker.conf
+
+# Older versions kept the backup next to the original as /etc/rc.d/S56moonraker.orig.
+# OpenWrt starts every /etc/rc.d/S* file at boot, so it started a second
+# (Creality) Moonraker that could take port 7125 first. Move it out of rc.d.
+# Returns 0 when a stray copy was removed.
+remove_stray_moonraker_rc() {
+    [ -f "${MOONRAKER_RC}.orig" ] || return 1
+    mkdir -p "$(dirname "$MOONRAKER_RC_BAK")"
+    [ -f "$MOONRAKER_RC_BAK" ] || cp "${MOONRAKER_RC}.orig" "$MOONRAKER_RC_BAK"
+    rm -f "${MOONRAKER_RC}.orig"
+    log_success "Removed ${MOONRAKER_RC}.orig (it started a second Moonraker at boot)"
+    return 0
+}
 
 # Patch S56moonraker to use our config wrapper instead of the stock one
 patch_moonraker_startup() {
+    remove_stray_moonraker_rc
     # The upstream Moonraker service has its own config handling
     moonraker_is_upstream && return 0
     if grep -q "CONF=/mnt/UDISK" "$MOONRAKER_RC" 2>/dev/null; then
@@ -533,9 +547,10 @@ patch_moonraker_startup() {
     fi
 
     # Back up original
-    if [ ! -f "${MOONRAKER_RC}.orig" ]; then
-        cp "$MOONRAKER_RC" "${MOONRAKER_RC}.orig"
-        log_success "Backed up original S56moonraker to ${MOONRAKER_RC}.orig"
+    if [ ! -f "$MOONRAKER_RC_BAK" ]; then
+        mkdir -p "$(dirname "$MOONRAKER_RC_BAK")"
+        cp "$MOONRAKER_RC" "$MOONRAKER_RC_BAK"
+        log_success "Backed up original S56moonraker to $MOONRAKER_RC_BAK"
     fi
 
     # Replace the CONF= line
@@ -545,10 +560,11 @@ patch_moonraker_startup() {
 
 # Restore the original CONF= line
 unpatch_moonraker_startup() {
-    if [ -f "${MOONRAKER_RC}.orig" ]; then
-        cp "${MOONRAKER_RC}.orig" "$MOONRAKER_RC"
+    remove_stray_moonraker_rc
+    if [ -f "$MOONRAKER_RC_BAK" ]; then
+        cp "$MOONRAKER_RC_BAK" "$MOONRAKER_RC"
         log_success "Restored original S56moonraker startup."
-        rm -f "${MOONRAKER_RC}.orig"
+        rm -f "$MOONRAKER_RC_BAK"
     else
         # Restore manually if backup is missing
         sed -i "s|CONF=/mnt/UDISK/printer_data/config/moonraker.conf|CONF=/usr/share/moonraker/moonraker.conf|g" "$MOONRAKER_RC"
@@ -856,6 +872,13 @@ stock_fixes_menu() {
 # from the menu (a print may be running).
 ensure_addons() {
     local changed=0
+    # A stray /etc/rc.d/S56moonraker.orig has already started a second
+    # Moonraker this boot - remove it and restart so only one is left
+    if remove_stray_moonraker_rc && [ "$1" = "boot" ]; then
+        for pid in $(pgrep -f "moonraker.py"); do kill "$pid" 2>/dev/null; done
+        sleep 2
+        restart_moonraker force
+    fi
     # Firmware updates restore Creality's Moonraker init script
     if is_installed "moonraker_upstream"; then
         sh "$SCRIPT_DIR/scripts/moonraker_upstream.sh" ensure "$1"

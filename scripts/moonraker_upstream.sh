@@ -82,6 +82,7 @@ EOF
     # Zip installs (README) do not keep the executable bit
     chmod +x "$SHIM_DIR"/supervisorctl "$SHIM_DIR"/sudo
     # Boot used a patched copy of Creality's script; use the standard link instead
+    remove_stray_moonraker_rc
     rm -f "$RC_LINK"
     ln -s ../init.d/moonraker "$RC_LINK"
 }

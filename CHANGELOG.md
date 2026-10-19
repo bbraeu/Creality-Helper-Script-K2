@@ -25,6 +25,12 @@
   v1.36.4 there and the latest Fluidd only with the updatable Moonraker.
 - The Moonraker `[update_manager]` warning now points to the updatable
   Moonraker (Install menu 1 -> 2), which is what makes Software Updates work.
+- **Update manager gone after a restart.** Moonraker Extensions backed up
+  Creality's boot script as `/etc/rc.d/S56moonraker.orig`; OpenWrt starts every
+  `/etc/rc.d/S*` file, so a second (Creality) Moonraker started at boot and
+  could take port 7125 before the updatable one. The backup now lives in
+  `helper-script/backups/`, and the stray file is removed at boot (Moonraker
+  is restarted once) and on install.
 
 ## [2.0.0] - 2026-10-16 - Updatable Moonraker, release-based updates
 

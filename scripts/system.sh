@@ -437,6 +437,22 @@ printer_summary() {
     echo "$PRINTER_MODEL ($heater, bed mesh ${MESH_X_MIN},${MESH_Y_MIN} to ${MESH_X_MAX},${MESH_Y_MAX})"
 }
 
+# Append the _HELPER_RESPOND macro to file $1 (once). Klipper evaluates
+# {action_respond_info()} while it reads a macro, before any of its commands
+# run, so a "done" message must come from a macro called after the command:
+#   _HELPER_RESPOND MSG="Calibration complete."
+# No [respond] on stock K2 configs, so RESPOND/M118 are not available.
+write_respond_macro() {
+    grep -q '^\[gcode_macro _HELPER_RESPOND\]' "$1" 2>/dev/null && return 0
+    cat >> "$1" << 'EOF'
+
+[gcode_macro _HELPER_RESPOND]
+description: Print MSG to the console when this line is reached
+gcode:
+  {action_respond_info(params.MSG|default(""))}
+EOF
+}
+
 # Append chamber macros matching the detected hardware to file $1.
 # Without a chamber heater (K2 base) only status/cooling macros are written.
 write_chamber_macros() {
@@ -458,9 +474,10 @@ gcode:
   {% if wait == 1 and target > 0 %}
     {action_respond_info("Waiting for chamber to reach %.0f C..." % target)}
     TEMPERATURE_WAIT SENSOR="heater_generic ${CHAMBER_HEATER}" MINIMUM={target - 3}
-    {action_respond_info("Chamber reached target: %.0f C" % target)}
+    _HELPER_RESPOND MSG="Chamber reached target: {'%.0f' % target} C"
   {% endif %}
 EOF
+        write_respond_macro "$out"
     fi
 
     if [ -n "$CHAMBER_HEATER" ] || [ -n "$CHAMBER_FAN" ]; then

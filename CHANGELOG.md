@@ -1,5 +1,30 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- **Updatable Moonraker did not start** (`Could not locate nacl lib`): the
+  install now adds Entware's `libsodium`, which Moonraker's authorization
+  component needs (#2).
+- **`supervisorctl status` errors in Moonraker's log**: without a service name
+  the shim lists only installed services, so a missing Mobileraker no longer
+  makes it exit with code 4 (#2).
+- **Entware install when `bin.entware.net` is down**: falls back to the mirror
+  `entware.diversion.ch` (installer and `opkg.conf`) and stops with an error if
+  both fail (#3).
+- **Macro messages** like "calibration complete" appeared before the command
+  ran. They now come from the new `_HELPER_RESPOND` macro after it (#1).
+- **PID and bed mesh macros** save with `CXSAVE_CONFIG` instead of
+  `SAVE_CONFIG`, so Klipper no longer restarts. `PID_HOTEND` also tunes the
+  hotend's high temperature PID set (above `high_temp_value`, skip with
+  `HIGH_TEMP=0`) (#1).
+- **`BELTS_SHAPER_CALIBRATION`** sweeps the two CoreXY diagonals, one per belt,
+  instead of X and Y (#1).
+- **Shaper macros**: `TEST_RESONANCES` commands are one line each (Klipper does
+  not support `\` line continuation), messages no longer ask for `SAVE_CONFIG`
+  (Creality's `SHAPER_CALIBRATE` saves itself) and name `/tmp` as the place of
+  the CSV files.
+
 ## [2.1.0] - 2026-10-19 - Fix for Software Updates after restart, opt-in stock config fixes, rename to K2
 
 ### Changed

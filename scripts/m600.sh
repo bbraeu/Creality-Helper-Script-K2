@@ -63,7 +63,7 @@ gcode:
   G1 E80 F300
   G1 E30 F150
   G90
-  {action_respond_info("Filament loaded.")}
+  _HELPER_RESPOND MSG="Filament loaded."
 
 [gcode_macro FILAMENT_UNLOAD]
 description: Unload filament — heat, retract, pull
@@ -74,8 +74,9 @@ gcode:
   G1 E5 F300
   G1 E-80 F1800
   G90
-  {action_respond_info("Filament unloaded.")}
+  _HELPER_RESPOND MSG="Filament unloaded."
 EOF
+    write_respond_macro "$M600_CFG"
     add_include_to_printer_cfg "m600.cfg"
     restart_klipper force
     mark_installed "m600_support"

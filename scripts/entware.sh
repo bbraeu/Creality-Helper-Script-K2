@@ -51,9 +51,24 @@ urllib.request.urlretrieve(
     chmod +x ~/bin/wget
     export PATH=$PATH:~/bin
 
-    # Run installer
-    log_info "Running Entware installer..."
-    wget http://bin.entware.net/armv7sf-k2.6/installer/generic.sh -O - | sh
+    # Run installer. bin.entware.net is down now and then - fall back to a mirror
+    # and point opkg there too (the installer and opkg.conf use bin.entware.net).
+    local base mirror="" installer=/tmp/entware-generic.sh
+    for base in http://bin.entware.net https://entware.diversion.ch; do
+        log_info "Running Entware installer from $base..."
+        rm -f "$installer"
+        wget "$base/armv7sf-k2.6/installer/generic.sh" -O "$installer" && [ -s "$installer" ] || continue
+        sed -i "s|http://bin.entware.net|$base|g" "$installer"
+        sh "$installer"
+        [ -x /opt/bin/opkg ] && { mirror=$base; break; }
+    done
+    rm -f "$installer"
+    if [ -z "$mirror" ]; then
+        rm -f ~/bin/wget
+        log_error "Entware download failed - check the printer's internet connection and try again later."
+        return 1
+    fi
+    [ "$mirror" = http://bin.entware.net ] || sed -i "s|http://bin.entware.net|$mirror|g" /opt/etc/opkg.conf
 
     # Setup PATH
     export PATH=/opt/bin:/opt/sbin:$PATH

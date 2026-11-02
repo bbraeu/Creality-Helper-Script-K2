@@ -31,7 +31,14 @@ uptime_of() {
 
 status() {
     local rc=0 svc pid
-    [ $# -eq 0 ] && set -- $DEFAULT_SERVICES
+    # Without arguments list only the services this printer has, like the real
+    # supervisorctl. Moonraker rejects exit code 4 from its first "status" call
+    # and then logs an error on every update.
+    if [ $# -eq 0 ]; then
+        for svc in $DEFAULT_SERVICES; do
+            { [ -x "/etc/init.d/$svc" ] || [ -n "$(pid_of "$svc")" ]; } && set -- "$@" "$svc"
+        done
+    fi
     for svc in "$@"; do
         pid=$(pid_of "$svc")
         if [ -n "$pid" ]; then

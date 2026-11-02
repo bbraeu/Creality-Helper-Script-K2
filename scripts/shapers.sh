@@ -31,13 +31,14 @@ install_shapers() {
 #   INPUT_SHAPER_CALIBRATION  - full X+Y calibration (recommended)
 #   SHAPER_CALIBRATE_X        - X axis only
 #   SHAPER_CALIBRATE_Y        - Y axis only
-#   BELTS_SHAPER_CALIBRATION  - belt tension analysis via frequency profile
+#   BELTS_SHAPER_CALIBRATION  - compare the two CoreXY belts (diagonal sweeps)
 #   EXCITATE_AXIS_AT_FREQ     - hold excitation at a specific frequency for diagnosis
-#   AUTOTUNE_SHAPERS          - apply and save recommended shaper settings
+#   AUTOTUNE_SHAPERS          - save the last calibration results again
 #   TEST_RESONANCES_GRAPHS    - generate CSV data for external analysis
 #   RESTORE_SHAPERS           - restore previously saved shaper settings
 
 # ── Full calibration (recommended workflow) ───────────────────────────────────
+# Creality's SHAPER_CALIBRATE saves the results itself (CXSAVE_CONFIG).
 
 [gcode_macro INPUT_SHAPER_CALIBRATION]
 description: Run full X and Y resonance test and save recommended shaper settings
@@ -52,8 +53,7 @@ gcode:
 
   SHAPER_CALIBRATE
 
-  {action_respond_info("Calibration complete. Run SAVE_CONFIG to apply the results.")}
-  {action_respond_info("Or run AUTOTUNE_SHAPERS to apply and save automatically.")}
+  _HELPER_RESPOND MSG="Calibration complete. Results saved to printer.cfg."
 
 # ── Per-axis calibration ──────────────────────────────────────────────────────
 
@@ -65,7 +65,7 @@ gcode:
   {% endif %}
   {action_respond_info("Testing X axis resonances...")}
   SHAPER_CALIBRATE AXIS=X
-  {action_respond_info("X axis test complete. Run SAVE_CONFIG to apply.")}
+  _HELPER_RESPOND MSG="X axis test complete. Results saved to printer.cfg."
 
 [gcode_macro SHAPER_CALIBRATE_Y]
 description: Run resonance test on Y axis only
@@ -75,16 +75,16 @@ gcode:
   {% endif %}
   {action_respond_info("Testing Y axis resonances...")}
   SHAPER_CALIBRATE AXIS=Y
-  {action_respond_info("Y axis test complete. Run SAVE_CONFIG to apply.")}
+  _HELPER_RESPOND MSG="Y axis test complete. Results saved to printer.cfg."
 
 # ── Belt tension analysis ─────────────────────────────────────────────────────
-# K2-series printers are CoreXY with two belts (X and Y).
-# This macro performs a low-frequency sweep on each axis to compare the
-# frequency profiles of individual belts, helping diagnose uneven tension.
+# K2-series printers are CoreXY: a move along a diagonal (AXIS=1,1 or 1,-1)
+# drives only one of the two belts. Sweeping both diagonals gives one frequency
+# profile per belt; with equal tension both profiles look alike.
 # Target belt tension: see Settings > Self-check > Belt Tension on the screen
 
 [gcode_macro BELTS_SHAPER_CALIBRATION]
-description: Analyse belt tension via frequency sweep. Compare X and Y profiles.
+description: Compare the two CoreXY belts via a frequency sweep along each diagonal
 variable_min_freq: 5.0
 variable_max_freq: 60.0
 variable_hz_per_sec: 1.0
@@ -94,27 +94,20 @@ gcode:
     G28
   {% endif %}
 
+  {% set p = printer['gcode_macro BELTS_SHAPER_CALIBRATION'] %}
   {action_respond_info("Starting belt tension analysis...")}
-  {action_respond_info("Min freq: %.1fHz  Max freq: %.1fHz" % (printer['gcode_macro BELTS_SHAPER_CALIBRATION'].min_freq, printer['gcode_macro BELTS_SHAPER_CALIBRATION'].max_freq))}
-  {action_respond_info("Both axes should show similar frequency peaks if belt tension is balanced.")}
-  {action_respond_info("Unbalanced peaks indicate one belt is tighter/looser than the other.")}
+  {action_respond_info("Min freq: %.1fHz  Max freq: %.1fHz" % (p.min_freq, p.max_freq))}
+  {action_respond_info("Both belts should show similar frequency peaks if their tension is balanced.")}
   {action_respond_info("Check belt tension via Settings > Self-check > Belt Tension")}
 
-  TEST_RESONANCES AXIS=X OUTPUT=raw_data NAME=belt_x \
-    FREQ_START={printer['gcode_macro BELTS_SHAPER_CALIBRATION'].min_freq} \
-    FREQ_END={printer['gcode_macro BELTS_SHAPER_CALIBRATION'].max_freq} \
-    HZ_PER_SEC={printer['gcode_macro BELTS_SHAPER_CALIBRATION'].hz_per_sec} \
-    ACCEL_PER_HZ={printer['gcode_macro BELTS_SHAPER_CALIBRATION'].accel_per_hz}
+  TEST_RESONANCES AXIS=1,1 OUTPUT=raw_data NAME=belt_a FREQ_START={p.min_freq} FREQ_END={p.max_freq} HZ_PER_SEC={p.hz_per_sec} ACCEL_PER_HZ={p.accel_per_hz}
 
-  TEST_RESONANCES AXIS=Y OUTPUT=raw_data NAME=belt_y \
-    FREQ_START={printer['gcode_macro BELTS_SHAPER_CALIBRATION'].min_freq} \
-    FREQ_END={printer['gcode_macro BELTS_SHAPER_CALIBRATION'].max_freq} \
-    HZ_PER_SEC={printer['gcode_macro BELTS_SHAPER_CALIBRATION'].hz_per_sec} \
-    ACCEL_PER_HZ={printer['gcode_macro BELTS_SHAPER_CALIBRATION'].accel_per_hz}
+  _HELPER_RESPOND MSG="Belt A done, now belt B..."
 
-  {action_respond_info("Belt analysis complete.")}
-  {action_respond_info("CSV files saved to /mnt/UDISK/printer_data/config/")}
-  {action_respond_info("Download and plot both files to compare belt frequency profiles.")}
+  TEST_RESONANCES AXIS=1,-1 OUTPUT=raw_data NAME=belt_b FREQ_START={p.min_freq} FREQ_END={p.max_freq} HZ_PER_SEC={p.hz_per_sec} ACCEL_PER_HZ={p.accel_per_hz}
+
+  _HELPER_RESPOND MSG="Belt analysis complete. CSV files are in /tmp (names end in belt_a.csv and belt_b.csv)."
+  _HELPER_RESPOND MSG="Copy them off the printer before a restart and plot both to compare."
 
 # ── Excitation at fixed frequency (vibration diagnosis) ──────────────────────
 # Hold a specific frequency to locate vibration sources (rattles, loose parts).
@@ -135,23 +128,18 @@ gcode:
   {action_respond_info("Exciting %s axis at %.1fHz for %ds" % (axis, freq, time))}
   {action_respond_info("Listen/feel for rattles and loose parts while it vibrates.")}
 
-  TEST_RESONANCES AXIS={axis} \
-    FREQ_START={freq} \
-    FREQ_END={freq + 0.1} \
-    HZ_PER_SEC=0.01 \
-    ACCEL_PER_HZ={accel} \
-    OUTPUT=raw_data
+  TEST_RESONANCES AXIS={axis} FREQ_START={freq} FREQ_END={freq + 0.1} HZ_PER_SEC=0.01 ACCEL_PER_HZ={accel} OUTPUT=raw_data
 
-  {action_respond_info("Excitation complete.")}
+  _HELPER_RESPOND MSG="Excitation complete."
 
-# ── Apply and save recommended shapers ───────────────────────────────────────
+# ── Save shaper settings again ───────────────────────────────────────────────
 
 [gcode_macro AUTOTUNE_SHAPERS]
-description: Apply and save the recommended shaper settings from the last calibration
+description: Save the shaper settings of the last calibration again (SHAPER_CALIBRATE already saves them)
 gcode:
   {action_respond_info("Saving shaper calibration results to printer.cfg...")}
-  SAVE_CONFIG
-  {action_respond_info("Shaper settings saved. Klipper will restart to apply.")}
+  CXSAVE_CONFIG
+  _HELPER_RESPOND MSG="Shaper settings saved."
 
 # ── Generate raw CSV data for external analysis ───────────────────────────────
 
@@ -165,11 +153,11 @@ gcode:
   {action_respond_info("Generating resonance data for X axis...")}
   TEST_RESONANCES AXIS=X OUTPUT=raw_data NAME=resonance_x
 
-  {action_respond_info("Generating resonance data for Y axis...")}
+  _HELPER_RESPOND MSG="Generating resonance data for Y axis..."
   TEST_RESONANCES AXIS=Y OUTPUT=raw_data NAME=resonance_y
 
-  {action_respond_info("Done. CSV files saved to /mnt/UDISK/printer_data/config/")}
-  {action_respond_info("Download via Fluidd file manager for analysis with Klipper's calibrate_shaper.py")}
+  _HELPER_RESPOND MSG="Done. CSV files are in /tmp (names end in resonance_x.csv and resonance_y.csv)."
+  _HELPER_RESPOND MSG="Copy them off the printer before a restart and analyse them with calibrate_shaper.py from Klipper."
 
 # ── Restore saved shaper settings ────────────────────────────────────────────
 
@@ -197,6 +185,7 @@ gcode:
   {action_respond_info("  X: %s @ %.1f Hz" % (x_type, x_freq))}
   {action_respond_info("  Y: %s @ %.1f Hz" % (y_type, y_freq))}
 EOF
+    write_respond_macro "$SHAPERS_CFG"
 
     add_include_to_printer_cfg "shapers_calibration.cfg"
     restart_klipper force
@@ -211,14 +200,13 @@ EOF
     echo -e "  ${GREEN}Belt analysis:${NC}      BELTS_SHAPER_CALIBRATION"
     echo -e "  ${GREEN}Diagnosis:${NC}          EXCITATE_AXIS_AT_FREQ [AXIS=X] [FREQ=25] [TIME=10]"
     echo -e "  ${GREEN}Raw data:${NC}           TEST_RESONANCES_GRAPHS"
-    echo -e "  ${GREEN}Apply & save:${NC}       AUTOTUNE_SHAPERS"
+    echo -e "  ${GREEN}Save again:${NC}         AUTOTUNE_SHAPERS"
     echo -e "  ${GREEN}Restore:${NC}            RESTORE_SHAPERS"
     echo -e "  ${GREEN}Status:${NC}             SHAPER_STATUS"
     echo ""
     log_info "Recommended workflow:"
     echo "  1. Run INPUT_SHAPER_CALIBRATION"
-    echo "  2. Review results in console"
-    echo "  3. Run AUTOTUNE_SHAPERS to save"
+    echo "  2. Review results in console (they are saved automatically)"
     echo ""
     log_info "Belt tension check: Settings → Self-check → Belt Tension"
     echo ""

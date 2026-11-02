@@ -41,15 +41,28 @@ install_useful_macros() {
 # PID CALIBRATION
 # =============================================================================
 
+# K2 hotends have a second PID set (pid_kp_high_temp, ...) used above
+# [extruder] high_temp_value. Creality's PID_CALIBRATE fills that set when the
+# target is above high_temp_value, so PID_HOTEND runs once for each range
+# (HIGH_TEMP=0 skips the second run). CXSAVE_CONFIG saves without restarting
+# Klipper; new hotend values are used right away, bed values after a restart.
+
 [gcode_macro PID_HOTEND]
-description: PID calibration for the hotend. Usage: PID_HOTEND TEMP=220
+description: PID calibration for the hotend (normal and high range). Usage: PID_HOTEND TEMP=220 HIGH_TEMP=300
 gcode:
   {% set temp = params.TEMP|default(220)|float %}
+  {% set high_temp = params.HIGH_TEMP|default(300)|float %}
+  {% set high_limit = printer.configfile.settings.extruder.high_temp_value|default(0)|float %}
+  {% set both = high_limit > 0 and temp <= high_limit and high_temp > high_limit %}
   {action_respond_info("Starting hotend PID calibration at %.0f C..." % temp)}
   {action_respond_info("This will take several minutes. Do not interrupt.")}
   PID_CALIBRATE HEATER=extruder TARGET={temp}
-  SAVE_CONFIG
-  {action_respond_info("Hotend PID calibration complete. Config saved.")}
+  {% if both %}
+    _HELPER_RESPOND MSG="Now the high temperature range at {'%.0f' % high_temp} C..."
+    PID_CALIBRATE HEATER=extruder TARGET={high_temp}
+  {% endif %}
+  CXSAVE_CONFIG
+  _HELPER_RESPOND MSG="Hotend PID calibration complete. Saved, no restart needed."
 
 [gcode_macro PID_BED]
 description: PID calibration for the heated bed. Usage: PID_BED TEMP=60
@@ -58,9 +71,10 @@ gcode:
   {action_respond_info("Starting bed PID calibration at %.0f C..." % temp)}
   {action_respond_info("This will take several minutes. Do not interrupt.")}
   PID_CALIBRATE HEATER=heater_bed TARGET={temp}
-  SAVE_CONFIG
-  {action_respond_info("Bed PID calibration complete. Config saved.")}
+  CXSAVE_CONFIG
+  _HELPER_RESPOND MSG="Bed PID calibration complete. Saved, the new values are used after the next restart."
 CFGEOF
+    write_respond_macro "$MACROS_CFG"
 
     if [ -n "$CHAMBER_HEATER" ]; then
         cat >> "$MACROS_CFG" << CFGEOF
@@ -72,7 +86,7 @@ gcode:
   {action_respond_info("Heating chamber to %.0f C..." % temp)}
   SET_HEATER_TEMPERATURE HEATER=${CHAMBER_HEATER} TARGET={temp}
   TEMPERATURE_WAIT SENSOR="heater_generic ${CHAMBER_HEATER}" MINIMUM={temp - 2}
-  {action_respond_info("Chamber reached %.0f C." % temp)}
+  _HELPER_RESPOND MSG="Chamber reached {'%.0f' % temp} C."
 CFGEOF
     fi
 
@@ -98,8 +112,8 @@ gcode:
   M190 S{bed_temp}
 ${z_tilt_line}
   BED_MESH_CALIBRATE PROFILE=default
-  SAVE_CONFIG
-  {action_respond_info("Bed leveling complete. Mesh saved as default.")}
+  CXSAVE_CONFIG
+  _HELPER_RESPOND MSG="Bed leveling complete. Mesh saved as default."
 CFGEOF
 
     if [ "$HAS_Z_TILT" = 1 ]; then
@@ -113,7 +127,7 @@ gcode:
   {% endif %}
   {action_respond_info("Running Z-tilt adjustment...")}
   Z_TILT_ADJUST
-  {action_respond_info("Z-tilt complete.")}
+  _HELPER_RESPOND MSG="Z-tilt complete."
 CFGEOF
     fi
 
@@ -151,7 +165,7 @@ gcode:
     G1 X{printer["gcode_macro WARMUP"].end_x}   Y{printer["gcode_macro WARMUP"].start_y}
   {% endfor %}
   SET_VELOCITY_LIMIT ACCEL={orig_accel}
-  {action_respond_info("Warmup complete. %d loops done." % loops)}
+  _HELPER_RESPOND MSG="Warmup complete. {loops} loops done."
 CFGEOF
 
     write_chamber_macros "$MACROS_CFG"

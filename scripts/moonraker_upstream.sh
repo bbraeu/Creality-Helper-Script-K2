@@ -194,7 +194,9 @@ EOF
 
 build_env() {
     log_info "Installing Python from Entware..."
-    opkg_install python3 python3-pip python3-pillow python3-sqlite3 git git-http || return 1
+    # libsodium: needed by libnacl (Moonraker's authorization component).
+    # Creality's /usr/lib/libsodium.so.23 does not load in Entware's Python.
+    opkg_install python3 python3-pip python3-pillow python3-sqlite3 libsodium git git-http || return 1
     /opt/bin/pip3 install -q --no-cache-dir virtualenv || return 1
 
     if [ -d "$MR_DIR/.git" ]; then

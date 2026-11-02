@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.2.0] - 2026-11-02 - Moonraker libsodium, Entware mirror, macro fixes
 
 ### Fixed
 - **Updatable Moonraker did not start** (`Could not locate nacl lib`): the
